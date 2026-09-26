@@ -1,8 +1,13 @@
+using System;
 using System.Collections;
+using TMPro;
 using UnityEngine;
 
 public class Ball : MonoBehaviour
 {
+    // Raised once per ball-on-ball collision, with the impact speed
+    public static event Action<float> BallsCollided;
+
     public bool striped; // True if the ball is striped, false if solid
     public int number; // 0 = cue ball, 1-15 = object balls
 
@@ -12,8 +17,46 @@ public class Ball : MonoBehaviour
     [SerializeField] float stopSpeed = 0.075f; // below this the ball snaps to rest
     [SerializeField] float sinkTime = 0.25f;
 
+    [Header("Scoring")]
+    [SerializeField] float multiplierGain = 0.1f; // added to the multiplier on each ball-on-ball collision
+    [SerializeField] float minCollisionSpeed = 0.1f; // gentler contacts (resting jitter) don't count
+
+    [Header("Multiplier label")]
+    [SerializeField] TMP_FontAsset labelFont; // optional, leave empty for the default TMP font
+    [SerializeField] float labelFontSize = 3f;
+    [SerializeField] float labelGap = 0.1f; // space between the top of the ball and the bottom of the label (world units)
+
     public Rigidbody2D Rb { get; private set; }
     public CircleCollider2D Collider { get; private set; }
+
+    // Money paid out when the ball is pocketed, before the multiplier
+    public int Value
+    {
+        get => baseValue;
+        set
+        {
+            baseValue = value;
+            UpdateLabel();
+        }
+    }
+
+    // Starts at 1x and goes up every time this ball collides with another ball
+    public float Multiplier
+    {
+        get => multiplier;
+        private set
+        {
+            multiplier = value;
+            UpdateLabel();
+        }
+    }
+
+    public int Payout => Mathf.RoundToInt(Value * Multiplier);
+
+    // Read by GameEngine to predict where a moving ball will go
+    public float Bounciness => bounciness;
+    public float LinearDamping => linearDamping;
+    public float StopSpeed => stopSpeed;
 
     public bool IsCueBall => number == 0;
     public bool IsPocketed { get; private set; }
@@ -25,8 +68,11 @@ public class Ball : MonoBehaviour
     public bool IsSettled => !sinking && (IsPocketed || Rb.linearVelocity.sqrMagnitude <= stopSpeed * stopSpeed);
 
     bool sinking;
+    int baseValue;
+    float multiplier = 1f;
     Vector3 startScale;
     SpriteRenderer sr;
+    TextMeshPro label;
 
     void Awake()
     {
@@ -40,7 +86,7 @@ public class Ball : MonoBehaviour
         Rb.bodyType = RigidbodyType2D.Dynamic;
         Rb.gravityScale = 0f; // top-down view
         Rb.linearDamping = linearDamping;
-        Rb.freezeRotation = true; // no sprite spinning
+        Rb.freezeRotation = false; // no sprite spinning
         Rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         Rb.interpolation = RigidbodyInterpolation2D.Interpolate;
 
@@ -48,11 +94,15 @@ public class Ball : MonoBehaviour
         if (Collider == null) Collider = gameObject.AddComponent<CircleCollider2D>();
         Collider.radius = sr.sprite != null ? sr.sprite.bounds.extents.x : Collider.radius;
         Collider.sharedMaterial = new PhysicsMaterial2D { bounciness = bounciness, friction = 0f };
+
+        CreateLabel();
     }
 
-    public void Init(int ballNumber, Sprite sprite)
+    public void Init(int ballNumber, Sprite sprite, int value)
     {
         number = ballNumber;
+        Value = value;
+        UpdateLabel();
         striped = ballNumber > 8;
         sr.sprite = sprite;
         Collider.radius = sprite.bounds.extents.x;
@@ -63,6 +113,56 @@ public class Ball : MonoBehaviour
     public void Hit(Vector2 velocity)
     {
         Rb.linearVelocity = velocity;
+    }
+
+    void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (!collision.collider.TryGetComponent(out Ball other)) return;
+
+        float impactSpeed = collision.relativeVelocity.magnitude;
+
+        // Both balls get this callback, so each one raises its own multiplier
+        if (impactSpeed >= minCollisionSpeed) Multiplier += multiplierGain;
+
+        // ...but only the lower ID reports the collision
+        if (GetInstanceID() < other.GetInstanceID()) BallsCollided?.Invoke(impactSpeed);
+    }
+
+    // A world-space TextMeshPro that floats above the ball showing its base value with the multiplier under it
+    void CreateLabel()
+    {
+        GameObject go = new GameObject("Value Label");
+        go.transform.SetParent(transform, false);
+
+        label = go.AddComponent<TextMeshPro>();
+        if (labelFont != null) label.font = labelFont;
+        label.fontSize = labelFontSize;
+        label.alignment = TextAlignmentOptions.Bottom;
+        label.rectTransform.pivot = new Vector2(0.5f, 0f); // anchored by its bottom edge, so the value line sits above the multiplier
+        label.color = Color.white;
+        label.outlineWidth = 0.25f;
+        label.outlineColor = Color.black;
+        label.sortingOrder = 12; // above the ball, below the aim guide
+        label.rectTransform.sizeDelta = new Vector2(5f, 1f); // wide enough that it never wraps
+
+        UpdateLabel();
+    }
+
+    void UpdateLabel()
+    {
+        if (label == null) return;
+
+        label.gameObject.SetActive(number > 0); // the cue ball doesn't pay out, so it gets no label
+        label.text = $"${baseValue}\n<color=#FFE066>{multiplier:0.0#}x</color>";
+    }
+
+    // Keeps the label upright and above the ball even if the ball rolls or spins
+    void LateUpdate()
+    {
+        if (label == null) return;
+
+        label.transform.rotation = Quaternion.identity;
+        label.transform.position = transform.position + Vector3.up * (WorldRadius + labelGap);
     }
 
     void FixedUpdate()

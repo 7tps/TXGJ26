@@ -107,6 +107,11 @@ MonoBehaviour:
   bounciness: 0.9
   stopSpeed: 0.15
   sinkTime: 0.25
+  multiplierGain: 0.1
+  minCollisionSpeed: 0.1
+  labelFont: {fileID: 11400000, guid: dc44219695dec6944ad254c7216af6fa, type: 2}
+  labelFontSize: 5
+  labelGap: 0.3
 --- !u!58 &8558529575132307491
 CircleCollider2D:
   m_ObjectHideFlags: 0

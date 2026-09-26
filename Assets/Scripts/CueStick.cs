@@ -10,6 +10,9 @@ public class CueStick : MonoBehaviour
     // Fired the moment the tip hits the cue ball
     public event Action ShotTaken;
 
+    // Fired with it, carrying the strike power from 0 to 1
+    public event Action<float> CueStruck;
+
     [SerializeField] float tipGap = 0.2f; // resting distance between the tip and the ball's edge
     [SerializeField] float maxPull = 4f; // how far the cue can be pulled back (world units)
     [SerializeField] float minPull = 0.25f; // releasing with less than this cancels the shot
@@ -29,6 +32,23 @@ public class CueStick : MonoBehaviour
     float tipDistance; // gap between the tip and the ball's edge
     float strikeSpeed;
     float followTimer;
+
+    // For the aim guide: true while the player is lining up or pulling back a shot
+    public bool IsAiming => phase == Phase.Aiming || phase == Phase.Charging;
+    public Vector2 AimDirection => aimDir;
+
+    // The speed the cue ball would leave at if the shot were released now. While
+    // just aiming this is full power. Pulling back less than the minimum gives 0
+    // because that shot would be cancelled.
+    public float PreviewSpeed
+    {
+        get
+        {
+            if (phase == Phase.Aiming) return maxShotSpeed;
+            if (phase == Phase.Charging && pull >= minPull) return pull / maxPull * maxShotSpeed;
+            return 0f;
+        }
+    }
 
     void Awake()
     {
@@ -137,6 +157,7 @@ public class CueStick : MonoBehaviour
 
             phase = Phase.FollowThrough;
             followTimer = followThroughTime;
+            CueStruck?.Invoke(strikeSpeed / maxShotSpeed);
             ShotTaken?.Invoke();
         }
 
