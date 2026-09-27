@@ -79,7 +79,7 @@ public class Ball : MonoBehaviour
         startScale = transform.localScale;
 
         sr = GetComponent<SpriteRenderer>();
-        sr.sortingOrder = 10; 
+        sr.sortingOrder = 11; // above the table, below the value label
 
         Rb = GetComponent<Rigidbody2D>();
         if (Rb == null) Rb = gameObject.AddComponent<Rigidbody2D>();
@@ -104,8 +104,11 @@ public class Ball : MonoBehaviour
         Value = value;
         UpdateLabel();
         striped = ballNumber > 8;
-        sr.sprite = sprite;
-        Collider.radius = sprite.bounds.extents.x;
+        if (sprite != null)
+        {
+            sr.sprite = sprite;
+            Collider.radius = sprite.bounds.extents.x;
+        }
         name = IsCueBall ? "CueBall" : "Ball " + ballNumber;
     }
 
