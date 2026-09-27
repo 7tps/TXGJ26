@@ -19,6 +19,12 @@ public class CueStick : MonoBehaviour
     [SerializeField] float maxShotSpeed = 25f; // cue speed (and so ball speed) at max pull (units per second)
     [SerializeField] float followThroughTime = 0.2f; // how long the cue stays on the ball after impact
 
+    [Header("Power upgrade")]
+    [SerializeField] float pullPerLevel = 1f; // added to maxPull per upgrade level
+    [SerializeField] float speedPerLevel = 5f; // added to maxShotSpeed per upgrade level
+
+    float baseMaxPull, baseMaxShotSpeed; // maxPull/maxShotSpeed at level 0, captured before any upgrade is applied
+
     enum Phase { Hidden, Aiming, Charging, Striking, FollowThrough }
 
     SpriteRenderer sr;
@@ -56,6 +62,8 @@ public class CueStick : MonoBehaviour
         sr.sortingOrder = 20; // above the balls
         halfLength = sr.sprite.bounds.extents.x * transform.lossyScale.x;
         cam = Camera.main;
+        baseMaxPull = maxPull;
+        baseMaxShotSpeed = maxShotSpeed;
         Hide();
     }
 
@@ -174,13 +182,12 @@ public class CueStick : MonoBehaviour
         transform.position = cueBall.Rb.position - aimDir * distance;
     }
 
-    public void increaseMaxPull()
+    // Sets maxPull/maxShotSpeed from the upgrade level directly, rather than nudging them - so calling
+    // this again with the same level (e.g. every time the gameplay scene reloads) is always correct,
+    // instead of compounding.
+    public void ApplyPowerLevel(int level)
     {
-        maxPull += 1f;
-    }
-
-    public void increaseMaxPower()
-    {
-        maxShotSpeed += 5f;
+        maxPull = baseMaxPull + level * pullPerLevel;
+        maxShotSpeed = baseMaxShotSpeed + level * speedPerLevel;
     }
 }

@@ -44,6 +44,8 @@ public class GameEngine : MonoBehaviour
     [Header("Aim guide")]
     [SerializeField] int guideBounces = 2; // how many cushion bounces the aim guide shows
     [SerializeField] float cushionBounciness = 0.9f;
+    [SerializeField] float cushionBouncinessPerLevel = 0.05f; // added to cushionBounciness per "Lively Rails" upgrade level
+    float baseCushionBounciness; // cushionBounciness at level 0, captured before any upgrade is applied
     PhysicsMaterial2D cushionMaterial;
 
     // Set this to change how many bounces the aim guide shows, e.g. from an upgrade
@@ -90,9 +92,11 @@ public class GameEngine : MonoBehaviour
         if (table == null) table = GameObject.Find("Table").transform;
         if (cueStick == null) cueStick = FindFirstObjectByType<CueStick>();
 
+        baseCushionBounciness = cushionBounciness;
         UpdateBalanceText();
         BuildTable();
         SpawnBalls();
+        ApplyUpgrades();
         aimGuide = new GameObject("AimGuide").AddComponent<AimGuide>();
 
         cueStick.ShotTaken += OnShotTaken;
@@ -102,6 +106,20 @@ public class GameEngine : MonoBehaviour
     void OnDestroy()
     {
         if (cueStick != null) cueStick.ShotTaken -= OnShotTaken;
+    }
+
+    // Reads the persisted upgrade levels and applies them to this round's table, cue and balls. Safe
+    // to call with no UpgradeProgress in the scene (e.g. testing SampleScene on its own) - everything
+    // just keeps its designer-set defaults.
+    void ApplyUpgrades()
+    {
+        UpgradeProgress progress = UpgradeProgress.Instance;
+        if (progress == null) return;
+
+        GuideBounces = progress.aimGuideLevel;
+        cueStick.ApplyPowerLevel(progress.powerLevel);
+        ApplyCushionBouncinessLevel(progress.bouncyRailsLevel);
+        foreach (Ball ball in balls) ball.ApplyFrictionLevel(progress.frictionLevel);
     }
 
     void Update()
@@ -524,24 +542,17 @@ public class GameEngine : MonoBehaviour
             Gizmos.DrawWireSphere(PxToWorld(p), pocketCaptureRadius * PxScale());
     }
 
-    public void returnToMenu()
-    {
-        SceneManager.LoadScene("Main Menu");
-    }
-
-    public void quit()
-    {
-        Application.Quit();
-    }
-
     public Ball getBall(int id)
     {
         return balls.Find(u => u.number == id);
     }
 
-    public void increaseCushionBounciness(float amount)
+    // Sets cushionBounciness from the upgrade level directly, rather than nudging it up each call - so
+    // calling this again with the same level (e.g. every time the gameplay scene reloads) is always
+    // correct, instead of compounding.
+    void ApplyCushionBouncinessLevel(int level)
     {
-        cushionBounciness = Mathf.Min(1f, cushionBounciness + amount);
+        cushionBounciness = Mathf.Min(1f, baseCushionBounciness + level * cushionBouncinessPerLevel);
         cushionMaterial.bounciness = cushionBounciness;
     }
 }

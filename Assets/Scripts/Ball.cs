@@ -17,6 +17,11 @@ public class Ball : MonoBehaviour
     [SerializeField] float stopSpeed = 0.075f; // below this the ball snaps to rest
     [SerializeField] float sinkTime = 0.25f;
 
+    [Header("Friction upgrade")]
+    [SerializeField] float dampingPerLevel = 0.1f; // subtracted from linearDamping per upgrade level
+
+    float baseLinearDamping; // linearDamping at level 0, captured before any upgrade is applied
+
     [Header("Scoring")]
     [SerializeField] float multiplierGain = 0.1f; // added to the multiplier on each ball-on-ball collision
     [SerializeField] float minCollisionSpeed = 0.1f; // gentler contacts (resting jitter) don't count
@@ -83,6 +88,8 @@ public class Ball : MonoBehaviour
 
         Rb = GetComponent<Rigidbody2D>();
         if (Rb == null) Rb = gameObject.AddComponent<Rigidbody2D>();
+        baseLinearDamping = linearDamping;
+
         Rb.bodyType = RigidbodyType2D.Dynamic;
         Rb.gravityScale = 0f; // top-down view
         Rb.linearDamping = linearDamping;
@@ -221,8 +228,13 @@ public class Ball : MonoBehaviour
         Rb.simulated = true;
     }
 
-    public void lowerDamping()
+    // Sets linearDamping from the upgrade level directly, rather than nudging it down each call - so
+    // calling this again with the same level (e.g. every time the gameplay scene reloads) is always
+    // correct, instead of compounding. Pushes the change to the Rigidbody2D too: setting the field
+    // alone never reached the physics engine, since Awake() only copies it across once.
+    public void ApplyFrictionLevel(int level)
     {
-        linearDamping -= 0.1f;
+        linearDamping = Mathf.Max(0f, baseLinearDamping - level * dampingPerLevel);
+        Rb.linearDamping = linearDamping;
     }
 }

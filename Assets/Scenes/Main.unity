@@ -856,8 +856,8 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2048194583}
-        m_TargetAssemblyTypeName: GameEngine, Assembly-CSharp
+      - m_Target: {fileID: 159820643}
+        m_TargetAssemblyTypeName: UIScript, Assembly-CSharp
         m_MethodName: quit
         m_Mode: 1
         m_Arguments:
@@ -4322,8 +4322,8 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2048194583}
-        m_TargetAssemblyTypeName: GameEngine, Assembly-CSharp
+      - m_Target: {fileID: 159820643}
+        m_TargetAssemblyTypeName: UIScript, Assembly-CSharp
         m_MethodName: returnToMenu
         m_Mode: 1
         m_Arguments:

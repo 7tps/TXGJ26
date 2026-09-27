@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class UIScript : MonoBehaviour
 {
@@ -20,5 +21,15 @@ public class UIScript : MonoBehaviour
     {
         Ball cueBall = gameEngine.getBall(0);
         cueStick.Show(cueBall);
+    }
+    
+    public void returnToMenu()
+    {
+        SceneManager.LoadScene("Main Menu");
+    }
+
+    public void quit()
+    {
+        Application.Quit();
     }
 }
