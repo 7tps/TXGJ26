@@ -217,4 +217,9 @@ public class Ball : MonoBehaviour
         Rb.linearVelocity = Vector2.zero;
         Rb.simulated = true;
     }
+
+    public void lowerDamping()
+    {
+        linearDamping -= 0.1f;
+    }
 }

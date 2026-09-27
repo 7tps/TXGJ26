@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class GameEngine : MonoBehaviour
 {
@@ -42,6 +43,8 @@ public class GameEngine : MonoBehaviour
 
     [Header("Aim guide")]
     [SerializeField] int guideBounces = 2; // how many cushion bounces the aim guide shows
+    [SerializeField] float cushionBounciness = 0.9f;
+    PhysicsMaterial2D cushionMaterial;
 
     // Set this to change how many bounces the aim guide shows, e.g. from an upgrade
     public int GuideBounces
@@ -295,7 +298,7 @@ public class GameEngine : MonoBehaviour
 
             // lose small amt of speed on cushion bounce
             float approach = -Vector2.Dot(vel, hit.normal);
-            float restitution = approach > BounceThreshold ? mover.Bounciness : 0f;
+            float restitution = approach > BounceThreshold ? cushionBounciness : 0f;
             vel += (1f + restitution) * approach * hit.normal;
         }
 
@@ -390,7 +393,7 @@ public class GameEngine : MonoBehaviour
         Transform root = new GameObject("Cushions").transform;
         float cx = (feltMin.x + feltMax.x) / 2f;
         float l = feltMin.x, r = feltMax.x, b = feltMin.y, t = feltMax.y, th = cushionThickness;
-
+        cushionMaterial = new PhysicsMaterial2D { bounciness = cushionBounciness, friction = 0f };
         AddCushion(root, l + cornerGap, cx - sideGap, t, t + th); // top left
         AddCushion(root, cx + sideGap, r - cornerGap, t, t + th); // top right
         AddCushion(root, l + cornerGap, cx - sideGap, b - th, b); // bottom left
@@ -404,9 +407,9 @@ public class GameEngine : MonoBehaviour
         GameObject go = new GameObject("Cushion");
         go.transform.SetParent(parent);
         go.transform.position = PxToWorld(new Vector2((minX + maxX) / 2f, (minY + maxY) / 2f));
-
         BoxCollider2D box = go.AddComponent<BoxCollider2D>();
         box.size = new Vector2(maxX - minX, maxY - minY) * PxScale();
+        box.sharedMaterial = cushionMaterial;
     }
 
     void SpawnBalls()
@@ -519,5 +522,26 @@ public class GameEngine : MonoBehaviour
         Gizmos.color = Color.red;
         foreach (Vector2 p in pockets)
             Gizmos.DrawWireSphere(PxToWorld(p), pocketCaptureRadius * PxScale());
+    }
+
+    public void returnToMenu()
+    {
+        SceneManager.LoadScene("Main Menu");
+    }
+
+    public void quit()
+    {
+        Application.Quit();
+    }
+
+    public Ball getBall(int id)
+    {
+        return balls.Find(u => u.number == id);
+    }
+
+    public void increaseCushionBounciness(float amount)
+    {
+        cushionBounciness = Mathf.Min(1f, cushionBounciness + amount);
+        cushionMaterial.bounciness = cushionBounciness;
     }
 }

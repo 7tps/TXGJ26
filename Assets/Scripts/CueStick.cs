@@ -173,4 +173,14 @@ public class CueStick : MonoBehaviour
         transform.rotation = Quaternion.Euler(0f, 0f, angle);
         transform.position = cueBall.Rb.position - aimDir * distance;
     }
+
+    public void increaseMaxPull()
+    {
+        maxPull += 1f;
+    }
+
+    public void increaseMaxPower()
+    {
+        maxShotSpeed += 5f;
+    }
 }
