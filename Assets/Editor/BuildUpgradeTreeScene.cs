@@ -183,8 +183,6 @@ public static class BuildUpgradeTreeScene
         BuildBackButton(canvasT);
         BuildMoneyText(canvasT);
 
-        Upgrades upgrades = new GameObject("UpgradeSystem").AddComponent<Upgrades>();
-
         // ---- Layout: a tidy tree per branch, fanned out North/East/South/West from the centre ----
         Dictionary<string, List<string>> childrenOf = new Dictionary<string, List<string>>();
         foreach (UpgradeNodeDef def in UpgradeTreeData.All)
@@ -261,7 +259,7 @@ public static class BuildUpgradeTreeScene
 
         // ---- All 89 nodes ----
         foreach (UpgradeNodeDef def in UpgradeTreeData.All)
-            BuildNode(content, upgrades, def, positions[def.id] - boundsCentre);
+            BuildNode(content, def, positions[def.id] - boundsCentre);
 
         // Built last (and parented directly to the Canvas, not the pan/zoomable Content) so it draws
         // on top of everything and stays a fixed, readable size regardless of the tree's zoom level.
@@ -498,7 +496,7 @@ public static class BuildUpgradeTreeScene
     // A single skill-tree node: a button whose frame swaps between default / hover / locked while
     // it's buyable, or is forced to a fixed tint once owned (see UpgradeTreeNodeUI.Refresh), with its
     // own icon inside from NodeIcons.
-    static void BuildNode(Transform parent, Upgrades upgrades, UpgradeNodeDef def, Vector2 pos)
+    static void BuildNode(Transform parent, UpgradeNodeDef def, Vector2 pos)
     {
         bool isMilestone = def.type == UpgradeNodeType.Milestone || def.type == UpgradeNodeType.Capstone;
 
@@ -591,7 +589,6 @@ public static class BuildUpgradeTreeScene
         UpgradeTreeNodeUI nodeUI = node.AddComponent<UpgradeTreeNodeUI>();
         SerializedObject so = new SerializedObject(nodeUI);
         so.FindProperty("nodeId").stringValue = def.id;
-        so.FindProperty("upgrades").objectReferenceValue = upgrades;
         so.FindProperty("button").objectReferenceValue = button;
         so.FindProperty("frame").objectReferenceValue = frame;
         so.FindProperty("nameText").objectReferenceValue = nameText;

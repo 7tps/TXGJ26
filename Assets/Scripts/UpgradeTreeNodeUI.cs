@@ -10,7 +10,6 @@ using UnityEngine.UI;
 public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
 {
     [SerializeField] string nodeId;
-    [SerializeField] Upgrades upgrades;
     [SerializeField] Button button;
     [SerializeField] Image frame;
     [SerializeField] TMP_Text nameText;
@@ -37,60 +36,49 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     {
         UpgradeNodeDef def = UpgradeTreeData.Get(nodeId);
         UpgradeProgress progress = UpgradeProgress.Instance;
-        if (def == null || progress == null) return;
-        if (progress.IsOwned(nodeId) || progress.IsExcluded(nodeId) || !IsUnlocked(def, progress)) return;
-        if (!progress.TrySpend(UpgradeTreeData.CostOf(nodeId))) return; // can't afford it yet
+        if (def == null || progress == null)
+        {
+            Debug.LogWarning($"Can't buy \"{nodeId}\": {(def == null ? "no such node in UpgradeTreeData" : "there is no UpgradeProgress")}.");
+            return;
+        }
+        if (progress.IsOwned(nodeId) || progress.IsExcluded(nodeId)) return;
+        if (!IsUnlocked(def, progress))
+        {
+            Debug.Log($"Can't buy \"{def.label}\" yet: it's still locked (parent node not owned, or a prerequisite is missing).");
+            return;
+        }
 
+        // Nodes with a real implementation buy through Upgrades, which charges its own cost from the
+        // shared wallet and applies the effect. The rest have nothing to apply, so they're just paid for
+        // at the tree's placeholder price and marked owned.
+        Upgrades upgrades = Upgrades.Instance;
+        bool bought;
+        if (upgrades != null && upgrades.HasNodeBinding(nodeId))
+        {
+            bought = upgrades.TryBuyNode(nodeId);
+        }
+        else
+        {
+            int cost = UpgradeTreeData.CostOf(nodeId);
+            bought = cost <= 0 || progress.TrySpend(cost);
+        }
+        if (!bought)
+        {
+            Debug.Log($"Couldn't buy \"{def.label}\": costs ${CostOf(nodeId)}, you have ${progress.Money} (or its own prerequisite isn't met).");
+            return;
+        }
+
+        Debug.Log($"Bought \"{def.label}\" (${progress.Money} left).");
         progress.Own(nodeId);
         if (def.exclusiveWith != null) progress.Exclude(def.exclusiveWith);
-
-        ApplyRealEffect(nodeId);
         Refresh();
     }
 
-    // Nodes that map onto a mechanic GameEngine/CueStick/Ball actually has today. Buying one of these
-    // bumps the matching level by one; GameEngine re-applies all four levels next time SampleScene
-    // loads (see GameEngine.ApplyUpgrades). Everything not listed here has no effect yet - see the
-    // class comment on UpgradeTreeData.
-    void ApplyRealEffect(string id)
+    // What this node actually costs: the Buy method's own price when it has one, the tree's placeholder otherwise
+    static int CostOf(string id)
     {
-        switch (id)
-        {
-            case "cue_chalk_up":
-            case "cue_power_2":
-            case "cue_power_3":
-            case "cue_power_4":
-            case "cue_power_5":
-                upgrades.UpgradeShotPower();
-                break;
-
-            case "cue_aim_guide_1":
-            case "cue_aim_guide_2":
-            case "cue_aim_guide_3":
-            case "cue_aim_guide_4":
-            case "cue_seeing_the_table": // the milestone doubles as the guide's final step
-                upgrades.UpgradeAimGuide();
-                break;
-
-            case "table_smooth_felt_1":
-            case "table_smooth_felt_2":
-            case "table_smooth_felt_3":
-            case "table_smooth_felt_4":
-                upgrades.UpgradeFrictionLevel();
-                break;
-
-            case "table_lively_rails_1":
-            case "table_lively_rails_2":
-            case "table_lively_rails_3":
-            case "table_know_the_rails": // ditto - the milestone doubles as lively rails' final step
-                upgrades.BuyBouncierRails();
-                break;
-
-            case "cue_steady_hand_1":
-            case "cue_steady_hand_2":
-                upgrades.UpgradeSteadyHand();
-                break;
-        }
+        Upgrades upgrades = Upgrades.Instance;
+        return upgrades != null && upgrades.HasNodeBinding(id) ? upgrades.NodeCost(id) : UpgradeTreeData.CostOf(id);
     }
 
     public void Refresh()
@@ -131,7 +119,7 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
             // Unlocked by the tree, but still needs the node's cost overlay to say whether it's
             // actually affordable right now - reuses the locked text color as a "not yet" dim rather
             // than adding a fourth visual state.
-            bool canAfford = progress.Money >= UpgradeTreeData.CostOf(nodeId);
+            bool canAfford = progress.Money >= CostOf(nodeId);
             frame.color = Color.white;
             button.transition = Selectable.Transition.SpriteSwap;
             button.interactable = canAfford;
@@ -146,7 +134,7 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
         UpgradeProgress progress = UpgradeProgress.Instance;
         if (def == null || Tooltip.Instance == null) return;
 
-        string costLine = progress != null && progress.IsOwned(nodeId) ? "Owned" : $"Cost: ${UpgradeTreeData.CostOf(nodeId)}";
+        string costLine = progress != null && progress.IsOwned(nodeId) ? "Owned" : $"Cost: ${CostOf(nodeId)}";
         Tooltip.Instance.Show($"<b>{def.label}</b>\n{def.description}\n\n{costLine}");
     }
 
@@ -163,6 +151,9 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
                 if (!progress.IsOwned(milestoneId)) return false;
             return true;
         }
+
+        // Conditions the parent links can't express (e.g. needing both of two nodes, not either)
+        if (Upgrades.Instance != null && !Upgrades.Instance.NodeRequirementsMet(def.id)) return false;
 
         if (def.parent == null) return true; // the centre itself
         if (progress.IsOwned(def.parent)) return true;

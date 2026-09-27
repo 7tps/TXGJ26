@@ -20,17 +20,11 @@ public class CueStick : MonoBehaviour
     [SerializeField] float maxShotSpeed = 25f; // cue speed (and so ball speed) at max pull (units per second)
     [SerializeField] float followThroughTime = 0.2f; // how long the cue stays on the ball after impact
 
-    [Header("Power upgrade")]
-    [SerializeField] float pullPerLevel = 1f; // added to maxPull per upgrade level
-    [SerializeField] float speedPerLevel = 5f; // added to maxShotSpeed per upgrade level
-
     [Header("Steady Hand power readout")]
     [SerializeField] float readoutFontSize = 3f;
     [SerializeField] float readoutGap = 0.15f; // space between the top of the cue ball and the readout (world units)
     [SerializeField] int readoutBarSegments = 20;
-    static readonly float[] PowerCurveByLevel = { 1f, 1.3f, 1.6f }; // level 0-2; higher = finer control at low/mid power
 
-    float baseMaxPull, baseMaxShotSpeed; // maxPull/maxShotSpeed at level 0, captured before any upgrade is applied
     float powerCurve = 1f; // 1 = linear; Steady Hand raises it for finer control at low/mid power
     bool showPowerReadout;
     TextMeshPro powerLabel;
@@ -79,9 +73,17 @@ public class CueStick : MonoBehaviour
         sr.sortingOrder = 20; // above the balls
         halfLength = sr.sprite.bounds.extents.x * transform.lossyScale.x;
         cam = Camera.main;
-        baseMaxPull = maxPull;
-        baseMaxShotSpeed = maxShotSpeed;
         Hide();
+
+        if (Upgrades.Instance != null)
+        {
+            maxPull = Upgrades.Instance.CurrentMaxPull;
+            maxShotSpeed = Upgrades.Instance.CurrentMaxShotSpeed;
+            powerCurve = Upgrades.Instance.CurrentPowerCurve;
+            showPowerReadout = Upgrades.Instance.SteadyHandLevel > 0;
+        }
+
+        if (showPowerReadout) CreatePowerLabel();
     }
 
     void OnDestroy()
@@ -89,8 +91,8 @@ public class CueStick : MonoBehaviour
         if (powerLabel != null) Destroy(powerLabel.gameObject);
     }
 
-    // Not parented to the cue: the cue rotates, and a child would need re-parenting if the cue is ever
-    // pooled/cloned (e.g. a future second cue ball).
+    // Not parented to the cue: the cue rotates, and a child would also get copied when GameEngine
+    // clones this object for Extra Cue Ball's second stick
     void CreatePowerLabel()
     {
         powerLabel = new GameObject("Power Readout").AddComponent<TextMeshPro>();
@@ -109,7 +111,7 @@ public class CueStick : MonoBehaviour
     {
         if (powerLabel == null) return;
 
-        bool visible = showPowerReadout && phase == Phase.Charging;
+        bool visible = phase == Phase.Charging;
         powerLabel.gameObject.SetActive(visible);
         if (!visible) return;
 
@@ -242,21 +244,15 @@ public class CueStick : MonoBehaviour
         transform.position = cueBall.Rb.position - aimDir * distance;
     }
 
-    // Sets maxPull/maxShotSpeed from the upgrade level directly, rather than nudging them - so calling
-    // this again with the same level (e.g. every time the gameplay scene reloads) is always correct,
-    // instead of compounding.
-    public void ApplyPowerLevel(int level)
+    // Set this to change how far the cue can be pulled back, e.g. from an upgrade
+    public void SetMaxPull(float value)
     {
-        maxPull = baseMaxPull + level * pullPerLevel;
-        maxShotSpeed = baseMaxShotSpeed + level * speedPerLevel;
+        maxPull = Mathf.Max(0f, value);
     }
 
-    // Sets the power curve (and whether the readout shows) from the upgrade level directly, same
-    // reasoning as ApplyPowerLevel above - safe to call every time SampleScene loads.
-    public void ApplySteadyHandLevel(int level)
+    // Set this to change the cue's max speed at full pull, e.g. from an upgrade
+    public void SetMaxShotSpeed(float value)
     {
-        powerCurve = PowerCurveByLevel[Mathf.Clamp(level, 0, PowerCurveByLevel.Length - 1)];
-        showPowerReadout = level > 0;
-        if (showPowerReadout && powerLabel == null) CreatePowerLabel();
+        maxShotSpeed = Mathf.Max(0f, value);
     }
 }

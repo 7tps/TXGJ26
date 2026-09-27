@@ -19,6 +19,7 @@ public class GameEngine : MonoBehaviour
 
     [Header("Scoring")]
     [SerializeField] TMP_Text balanceText; // shows the total balance
+    [SerializeField] TMP_Text timerText; // optional, shows time left tonight
     [SerializeField] int[] ballValues = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150 }; // money for balls 1-15
 
     [Header("References")]
@@ -45,8 +46,6 @@ public class GameEngine : MonoBehaviour
     [Header("Aim guide")]
     [SerializeField] int guideBounces = 2; // how many cushion bounces the aim guide shows
     [SerializeField] float cushionBounciness = 0.9f;
-    [SerializeField] float cushionBouncinessPerLevel = 0.05f; // added to cushionBounciness per "Lively Rails" upgrade level
-    float baseCushionBounciness; // cushionBounciness at level 0, captured before any upgrade is applied
     PhysicsMaterial2D cushionMaterial;
 
     // Set this to change how many bounces the aim guide shows, e.g. from an upgrade
@@ -64,6 +63,10 @@ public class GameEngine : MonoBehaviour
     const float TouchDistance = 0.02f; // a cast hit closer than this counts as already touching
 
     public State CurrentState { get; private set; }
+
+    [Header("Rack")]
+    [SerializeField] int fallbackRackSize = 1; // object balls if there's no Upgrades to ask (never in a normal run)
+    const int MaxBalls = 15;
 
     // where a moving ball ends up and how a collision changes things
     public class ShotPrediction
@@ -87,49 +90,173 @@ public class GameEngine : MonoBehaviour
     Ball cueBall;
     float captureRadiusWorld;
     Vector2 feltMinWorld, feltMaxWorld;
-    bool roundEnding; // true once every numbered ball is pocketed, so Update() stops re-arming the cue for another shot
+
+    // Extra Cue Ball (Ball tree, tier 3): a second cue ball + cue stick, created once if the upgrade is owned
+    Ball cueBall2;
+    CueStick cueStick2;
+    bool extraCueBallEnabled;
+
+    // Reset every turn (BeginAiming), not every shot, so a second shot from Extra Cue Ball still
+    // counts as part of the same chain/turn
+    readonly List<Ball> chainOrder = new List<Ball>(); // object balls, in the order each was first hit this turn
+    readonly Dictionary<Ball.SpecialType, int> specialPocketedThisTurn = new Dictionary<Ball.SpecialType, int>();
+    bool cue1ContributedThisTurn, cue2ContributedThisTurn;
+    int shotsThisTurn;
+
+    // Flair tree, also reset every turn
+    int pocketedThisTurn, payoutThisTurn; // Cash Out, Hot Streak
+    int ballsOnTableAtTurnStart, longChainTierThisTurn; // Long Chain
+    bool turnHasLastShotOfNight; // Closer: the shot still rolling when the timer hit 0
+    bool turnHasFinalShots; // Nothing to Lose: a shot taken in the night's last few seconds
+    bool roundOver; // stops EndTurn running twice while the menu scene loads
+
+    public int ChainLengthNow => chainOrder.Count;
+
+    // 0 for the first object ball hit this turn, 1 for the second, ... -1 if not in the chain (e.g. a cue ball)
+    public int ChainPosition(Ball ball) => chainOrder.IndexOf(ball);
+
+    // True for the whole first shot of a turn (including its chain reaction), false from the
+    // second shot onward - only relevant once Extra Cue Ball allows a second shot in one turn
+    public bool IsFirstShotOfTurn => shotsThisTurn <= 1;
+
+    // True once both cue balls have each hit something this turn, and the Ball tier-4 upgrade for it is owned
+    public bool BothCueBallsContributed =>
+        cue1ContributedThisTurn && cue2ContributedThisTurn &&
+        Upgrades.Instance != null && Upgrades.Instance.HasDoubleMultOnMergedChains;
 
     void Start()
     {
         if (table == null) table = GameObject.Find("Table").transform;
         if (cueStick == null) cueStick = FindFirstObjectByType<CueStick>();
 
-        baseCushionBounciness = cushionBounciness;
+        // Pull whatever's currently owned from Upgrades before anything else is built, since
+        // purchases happen in the Upgrade Tree scene where none of these objects exist to push a value into
+        if (Upgrades.Instance != null)
+        {
+            if (Upgrades.Instance.HasAimGuide) guideBounces = Upgrades.Instance.CurrentGuideBounces;
+            cushionBounciness = Upgrades.Instance.CurrentCushionBounciness;
+            Upgrades.Instance.StartNewNight();
+        }
+
+        // The shared wallet lives on UpgradeProgress; Money here is just this scene's mirror of it
         if (UpgradeProgress.Instance != null) Money = UpgradeProgress.Instance.Money;
+
         UpdateBalanceText();
+        UpdateTimerText();
         BuildTable();
         SpawnBalls();
-        ApplyUpgrades();
         aimGuide = new GameObject("AimGuide").AddComponent<AimGuide>();
 
         cueStick.ShotTaken += OnShotTaken;
+
+        if (Upgrades.Instance != null && Upgrades.Instance.HasExtraCueBall) EnableExtraCueBall();
+
         BeginAiming();
     }
 
     void OnDestroy()
     {
         if (cueStick != null) cueStick.ShotTaken -= OnShotTaken;
-    }
-
-    // Reads the persisted upgrade levels and applies them to this round's table, cue and balls. Safe
-    // to call with no UpgradeProgress in the scene (e.g. testing SampleScene on its own) - everything
-    // just keeps its designer-set defaults.
-    void ApplyUpgrades()
-    {
-        UpgradeProgress progress = UpgradeProgress.Instance;
-        if (progress == null) return;
-
-        GuideBounces = progress.aimGuideLevel;
-        cueStick.ApplyPowerLevel(progress.powerLevel);
-        cueStick.ApplySteadyHandLevel(progress.steadyHandLevel);
-        ApplyCushionBouncinessLevel(progress.bouncyRailsLevel);
-        foreach (Ball ball in balls) ball.ApplyFrictionLevel(progress.frictionLevel);
+        if (cueStick2 != null) cueStick2.ShotTaken -= OnShotTaken;
     }
 
     void Update()
     {
-        if (CurrentState == State.BallsMoving && !roundEnding && balls.TrueForAll(b => b.IsSettled))
+        if (roundOver) return;
+
+        UpdateTimerText();
+
+        if (Upgrades.Instance != null && Upgrades.Instance.NightTimeUp)
+        {
+            // Out of time with nothing rolling: the night ends right away
+            if (CurrentState == State.Aiming)
+            {
+                FinishNight(false);
+                roundOver = true;
+                HideIdleCueSticks();
+                StartCoroutine(ReturnToLobbyAfterDelay());
+                return;
+            }
+
+            // Out of time mid-shot: no new shots, but this one finishes rolling and pays out
+            if (!turnHasLastShotOfNight) OnTimeRanOutMidShot();
+        }
+
+        if (CurrentState == State.BallsMoving && balls.TrueForAll(b => b.IsSettled)) EndTurn();
+    }
+
+    void OnTimeRanOutMidShot()
+    {
+        turnHasLastShotOfNight = true;
+        HideIdleCueSticks(); // with Extra Cue Ball, the other stick can't start a new shot
+
+        // Closer doubles the whole buzzer-beater shot, including anything it already pocketed before the timer hit 0
+        if (Upgrades.Instance.HasCloser)
+        {
+            int extra = Mathf.RoundToInt(payoutThisTurn * (Upgrades.Instance.CloserPayoutMultiplier - 1f));
+            payoutThisTurn += extra;
+            Earn(extra);
+        }
+    }
+
+    void FinishNight(bool rackCleared)
+    {
+        if (!rackCleared && Upgrades.Instance.HasLeftovers) PayLeftovers(Upgrades.Instance.LeftoversFraction);
+        Upgrades.Instance.EndNight();
+    }
+
+    // Runs once when every ball has settled after a turn: end-of-turn Flair bonuses, then either
+    // the next turn, or back to the menu if the rack is cleared or the night is out of shots
+    void EndTurn()
+    {
+        Upgrades up = Upgrades.Instance;
+
+        if (up != null)
+        {
+            if (up.HasCashOut && pocketedThisTurn >= up.CashOutMinBalls)
+                Earn(Mathf.RoundToInt(payoutThisTurn * (up.CashOutMultiplier - 1f)));
+
+            if (up.HasSecondWind && chainOrder.Count >= up.SecondWindMinChain) up.AddTime(up.SecondWindSeconds);
+
+            up.RecordShotResult(pocketedThisTurn > 0);
+        }
+
+        bool cleared = RackCleared();
+        if (cleared && up != null)
+        {
+            Earn(up.CleanSweepPayout);
+            up.RecordRoundCleared();
+        }
+
+        bool nightOver = up != null && up.NightTimeUp;
+        if (nightOver) FinishNight(cleared);
+
+        UpdateTimerText();
+
+        if (cleared || nightOver)
+        {
+            roundOver = true;
+            StartCoroutine(ReturnToLobbyAfterDelay());
+        }
+        else
+        {
             BeginAiming();
+        }
+    }
+
+    // Leftovers: every object ball still on the table when the night ends pays a fraction of its payout
+    void PayLeftovers(float fraction)
+    {
+        foreach (Ball ball in balls)
+            if (!ball.IsCueBall && !ball.IsPocketed) Earn(Mathf.RoundToInt(ball.Payout * fraction));
+    }
+
+    // A rack is cleared once every ball but the cue ball(s) has been pocketed
+    bool RackCleared()
+    {
+        foreach (Ball ball in balls)
+            if (!ball.IsCueBall && !ball.IsPocketed) return false;
+        return true;
     }
 
     // After the cue has moved for the frame, redraw the guide
@@ -174,16 +301,52 @@ public class GameEngine : MonoBehaviour
     void OnShotTaken()
     {
         CurrentState = State.BallsMoving;
+        shotsThisTurn++;
+
+        if (Upgrades.Instance != null && Upgrades.Instance.NightTimeLeft <= Upgrades.Instance.NothingToLoseSeconds)
+            turnHasFinalShots = true;
+    }
+
+    void HideIdleCueSticks()
+    {
+        if (cueStick.IsAiming) cueStick.Hide();
+        if (cueStick2 != null && cueStick2.IsAiming) cueStick2.Hide();
     }
 
     void BeginAiming()
     {
         CurrentState = State.Aiming;
 
+        // A new turn starts a fresh chain, even if Extra Cue Ball's second shot hasn't happened yet
+        chainOrder.Clear();
+        specialPocketedThisTurn.Clear();
+        cue1ContributedThisTurn = false;
+        cue2ContributedThisTurn = false;
+        shotsThisTurn = 0;
+        pocketedThisTurn = 0;
+        payoutThisTurn = 0;
+        longChainTierThisTurn = 0;
+        turnHasLastShotOfNight = false;
+        turnHasFinalShots = false;
+
+        ballsOnTableAtTurnStart = 0;
+        foreach (Ball ball in balls)
+            if (!ball.IsCueBall && !ball.IsPocketed) ballsOnTableAtTurnStart++;
+
+        // Slow Burn milestone: every ball still on the table gets a little multiplier each new turn
+        if (Upgrades.Instance != null && Upgrades.Instance.HasSlowBurn)
+            foreach (Ball ball in balls)
+                if (!ball.IsCueBall) ball.TickSlowBurn(Upgrades.Instance.SlowBurnAmount);
+
         // scratch logic
         if (cueBall.IsPocketed) cueBall.Respawn(FindFreeSpot(HeadSpot()));
-
         cueStick.Show(cueBall);
+
+        if (extraCueBallEnabled)
+        {
+            if (cueBall2.IsPocketed) cueBall2.Respawn(FindFreeSpot(HeadSpot() + Vector2.up * cueBall.WorldRadius * 4f));
+            cueStick2.Show(cueBall2);
+        }
     }
 
     void PocketBall(Ball ball, Vector2 pocketPos)
@@ -196,31 +359,126 @@ public class GameEngine : MonoBehaviour
         }
         else
         {
-            // Value x this ball's own multiplier
+            // V x M, then x C if it went down as part of a chain (2+ balls hit this turn)
             int payout = ball.Payout;
-            Money += payout;
-            UpgradeProgress.Instance?.AddMoney(payout); // carries the earning back into the Upgrade Tree's shared total
-            Debug.Log($"Pocketed ball {ball.number}: ${ball.Value} x {ball.Multiplier:0.0#} = ${payout} (total ${Money})");
-            UpdateBalanceText();
-            MoneyChanged?.Invoke(Money);
+            bool inChain = ChainLengthNow >= 2;
+            if (inChain) payout = Mathf.RoundToInt(payout * ChainPocketBonus());
+            payout = ApplyCloser(payout);
+
+            pocketedThisTurn++;
+            payoutThisTurn += payout;
+            Earn(payout);
+
+            if (ball.Special != Ball.SpecialType.None)
+            {
+                specialPocketedThisTurn.TryGetValue(ball.Special, out int count);
+                count++;
+                specialPocketedThisTurn[ball.Special] = count;
+
+                if (count == 2 && Upgrades.Instance != null && Upgrades.Instance.HasSpecialComboBonus)
+                    Earn(Upgrades.Instance.SpecialComboBonusAmount);
+            }
+
+            Debug.Log($"Pocketed ball {ball.number}: ${ball.Value} x {ball.Multiplier:0.0#}{(inChain ? $" x C {ChainPocketBonus():0.0#}" : "")} = ${payout} (total ${Money})");
         }
 
         BallPocketed?.Invoke(ball);
+    }
 
-        // Only numbered balls count - the cue ball gets respawned on the next aiming phase (scratch),
-        // so it never actually stays pocketed once the round is under way.
-        if (!ball.IsCueBall && balls.TrueForAll(b => b.IsCueBall || b.IsPocketed))
+    // Records the order object balls are first hit each turn, and which cue ball(s) have hit something
+    public void RegisterHit(Ball a, Ball b)
+    {
+        ConsiderHit(a);
+        ConsiderHit(b);
+    }
+
+    void ConsiderHit(Ball ball)
+    {
+        if (ball.IsCueBall)
         {
-            roundEnding = true;
-            cueStick.Hide(); // locks out aiming/shooting for the delay before the scene switch
-            StartCoroutine(ReturnToLobbyAfterDelay());
+            if (ball == cueBall) cue1ContributedThisTurn = true;
+            else if (ball == cueBall2) cue2ContributedThisTurn = true;
+        }
+        else if (!chainOrder.Contains(ball))
+        {
+            chainOrder.Add(ball);
+            CheckLongChain();
         }
     }
 
-    IEnumerator ReturnToLobbyAfterDelay()
+    // Long Chain: each time the chain reaches a new tier (40/60/80/100% of the balls on the table),
+    // every ball in it that's still on the table gets bonus M
+    void CheckLongChain()
     {
-        yield return new WaitForSeconds(2f);
-        SceneManager.LoadScene("Lobby");
+        if (Upgrades.Instance == null || !Upgrades.Instance.HasLongChain) return;
+
+        int tier = Upgrades.Instance.LongChainTier(chainOrder.Count, ballsOnTableAtTurnStart);
+        if (tier <= longChainTierThisTurn) return;
+
+        float bonus = (tier - longChainTierThisTurn) * Upgrades.Instance.LongChainBonusPerTier;
+        longChainTierThisTurn = tier;
+        foreach (Ball b in chainOrder) b.AddMultiplier(bonus);
+    }
+
+    // C: Clean Pocket's base, x Hot Streak, x Nothing to Lose during the last shots of the night
+    float ChainPocketBonus()
+    {
+        Upgrades up = Upgrades.Instance;
+        if (up == null) return 1f;
+
+        float c = up.CurrentChainPocketBonus * up.HotStreakFactor;
+        if (turnHasFinalShots && up.HasNothingToLose) c *= up.NothingToLoseBonus;
+        return c;
+    }
+
+    // Closer: everything paid out during the night's last shot is doubled
+    int ApplyCloser(int payout)
+    {
+        if (turnHasLastShotOfNight && Upgrades.Instance != null && Upgrades.Instance.HasCloser)
+            return Mathf.RoundToInt(payout * Upgrades.Instance.CloserPayoutMultiplier);
+        return payout;
+    }
+
+    // Every payout goes through here so the scene's Money and Upgrades' persistent wallet stay in step
+    void Earn(int amount)
+    {
+        if (amount <= 0) return;
+        Money += amount;
+        UpgradeProgress.Instance?.AddMoney(amount); // carries the earning back into the Upgrade Tree's shared total
+        UpdateBalanceText();
+        MoneyChanged?.Invoke(Money);
+    }
+
+    // True once every ball except `exception` and the cue ball(s) has been pocketed (for Money Ball)
+    public bool AllOtherBallsPocketed(Ball exception)
+    {
+        foreach (Ball ball in balls)
+            if (ball != exception && !ball.IsCueBall && !ball.IsPocketed) return false;
+        return true;
+    }
+
+    // Glass shatters mid-table instead of being pocketed: pay it out and sink it in place
+    public void PayGlass(Ball ball)
+    {
+        Earn(ApplyCloser(ball.Payout));
+
+        ball.Pocket(ball.Rb.position);
+        BallPocketed?.Invoke(ball);
+    }
+
+    // Creates the second cue ball and cue stick for the Extra Cue Ball upgrade. Safe to call more
+    // than once (e.g. every time this scene loads) - it only builds them the first time.
+    public void EnableExtraCueBall()
+    {
+        if (extraCueBallEnabled) return;
+        extraCueBallEnabled = true;
+
+        Vector2 spot = FindFreeSpot(HeadSpot() + Vector2.up * cueBall.WorldRadius * 4f);
+        cueBall2 = SpawnBall(-1, spot);
+
+        cueStick2 = Instantiate(cueStick.gameObject, cueStick.transform.parent).GetComponent<CueStick>();
+        cueStick2.name = "Cue Stick 2";
+        cueStick2.ShotTaken += OnShotTaken;
     }
 
     // PREDICTION
@@ -454,7 +712,10 @@ public class GameEngine : MonoBehaviour
     {
         cueBall = SpawnBall(0, HeadSpot());
 
-        // setup triangle
+        // Every night starts with a single object ball. The only way to get more is the rack upgrades,
+        // which raise Upgrades.RackSize (1 by default) and so how many balls are racked here
+        int rackSize = Mathf.Clamp(Upgrades.Instance != null ? Upgrades.Instance.RackSize : fallbackRackSize, 1, MaxBalls);
+
         List<int> numbers = new List<int>();
         for (int n = 1; n <= 15; n++)
             if (n != 8) numbers.Add(n);
@@ -464,17 +725,33 @@ public class GameEngine : MonoBehaviour
             (numbers[i], numbers[j]) = (numbers[j], numbers[i]);
         }
 
-        float spacing = cueBall.WorldRadius * 2f * 1.01f; 
+        float spacing = cueBall.WorldRadius * 2f * 1.01f;
         Vector2 apex = PxToWorld(FeltCentre() + new Vector2((feltMax.x - feltMin.x) * RackApexFraction, 0f));
-        int next = 0;
 
-        for (int row = 0; row < 5; row++)
+        List<Ball> spawned = new List<Ball>();
+
+        // Same triangle spots as the full rack, 8-ball fixed in the middle, filled from the apex row by
+        // row - a smaller rack just stops before the later spots
+        int next = 0;
+        for (int row = 0; row < 5 && spawned.Count < rackSize; row++)
         {
-            for (int i = 0; i <= row; i++)
+            for (int i = 0; i <= row && spawned.Count < rackSize; i++)
             {
                 Vector2 pos = apex + new Vector2(row * spacing * 0.866f, (i - row / 2f) * spacing);
                 int number = (row == 2 && i == 1) ? 8 : numbers[next++];
-                SpawnBall(number, pos);
+                spawned.Add(SpawnBall(number, pos));
+            }
+        }
+
+        // Milestone: every rack is guaranteed at least one special ball
+        if (Upgrades.Instance != null && Upgrades.Instance.HasGuaranteedSpecialPerRack)
+        {
+            bool anySpecial = spawned.Exists(b => b.Special != Ball.SpecialType.None);
+            if (!anySpecial)
+            {
+                Ball.SpecialType forced = Upgrades.Instance.RollSpecialType(true);
+                if (forced != Ball.SpecialType.None)
+                    spawned[UnityEngine.Random.Range(0, spawned.Count)].ApplySpecialType(forced);
             }
         }
     }
@@ -482,7 +759,21 @@ public class GameEngine : MonoBehaviour
     Ball SpawnBall(int number, Vector2 pos)
     {
         Ball ball = Instantiate(ballPrefab, pos, Quaternion.identity);
-        ball.Init(number, GetSprite(number), ValueOf(number));
+
+        int value = number > 0 ? ValueOf(number) : 0;
+        Ball.SpecialType type = Ball.SpecialType.None;
+
+        if (number > 0 && Upgrades.Instance != null)
+            type = Upgrades.Instance.RollSpecialType(false);
+
+        ball.Init(number, GetSprite(number), value, type);
+
+        if (Upgrades.Instance != null)
+        {
+            ball.SetLinearDamping(Upgrades.Instance.CurrentFriction);
+            if (number > 0) ball.AddMultiplier(Upgrades.Instance.StartingMultiplierBonus);
+        }
+
         balls.Add(ball);
         return ball;
     }
@@ -492,14 +783,25 @@ public class GameEngine : MonoBehaviour
         if (balanceText != null) balanceText.text = $"${Money:N0}";
     }
 
-    // The cue ball (0) is worth nothing
-    int ValueOf(int number) => number >= 1 && number <= ballValues.Length ? ballValues[number - 1] : 0;
+    void UpdateTimerText()
+    {
+        if (timerText == null || Upgrades.Instance == null) return;
+        int seconds = Mathf.CeilToInt(Upgrades.Instance.NightTimeLeft);
+        timerText.text = $"{seconds / 60}:{seconds % 60:00}";
+    }
 
-    // Looks a ball's sprite up by name: "cue ball" for the cue ball, its own number otherwise. A texture
+    // The cue ball (0 or below) is worth nothing. Ball Value upgrade adds a flat bonus on top.
+    int ValueOf(int number)
+    {
+        int value = number >= 1 && number <= ballValues.Length ? ballValues[number - 1] : 0;
+        return Upgrades.Instance != null ? Upgrades.Instance.ApplyBallValueBonus(value) : value;
+    }
+
+    // Looks a ball's sprite up by name: "cue ball" for either cue ball, its own number otherwise. A texture
     // sliced to a single sprite gets named "<filename>_0" by Unity, so that suffix is stripped before comparing.
     Sprite GetSprite(int ballNumber)
     {
-        string expected = ballNumber == 0 ? "cue ball" : ballNumber.ToString();
+        string expected = ballNumber <= 0 ? "cue ball" : ballNumber.ToString();
 
         foreach (Sprite s in ballSprites)
         {
@@ -508,7 +810,7 @@ public class GameEngine : MonoBehaviour
             if (string.Equals(spriteName, expected, StringComparison.OrdinalIgnoreCase)) return s;
         }
 
-        string who = ballNumber == 0 ? "the cue ball" : "ball " + ballNumber;
+        string who = ballNumber <= 0 ? "the cue ball" : "ball " + ballNumber;
         Debug.LogError($"No sprite found for {who} in GameEngine's Ball Sprites list (looked for \"{expected}\")");
         return null;
     }
@@ -562,17 +864,35 @@ public class GameEngine : MonoBehaviour
             Gizmos.DrawWireSphere(PxToWorld(p), pocketCaptureRadius * PxScale());
     }
 
+    // Waits a moment (so the last ball finishes sinking) before going back to the Lobby, the hub every
+    // scene returns to. The button-driven returnToMenu()/quit() live on UIScript.
+    IEnumerator ReturnToLobbyAfterDelay()
+    {
+        yield return new WaitForSeconds(2f);
+        SceneManager.LoadScene("Lobby");
+    }
+
     public Ball getBall(int id)
     {
         return balls.Find(u => u.number == id);
     }
 
-    // Sets cushionBounciness from the upgrade level directly, rather than nudging it up each call - so
-    // calling this again with the same level (e.g. every time the gameplay scene reloads) is always
-    // correct, instead of compounding.
-    void ApplyCushionBouncinessLevel(int level)
+    // Set this to change how bouncy the rails are, e.g. from an upgrade
+    public void SetCushionBounciness(float value)
     {
-        cushionBounciness = Mathf.Min(1f, baseCushionBounciness + level * cushionBouncinessPerLevel);
+        cushionBounciness = Mathf.Clamp01(value);
         cushionMaterial.bounciness = cushionBounciness;
+    }
+
+    // Spends money if there's enough, and reports whether it succeeded
+    public bool TrySpend(int amount)
+    {
+        if (amount <= 0 || Money < amount) return false;
+        if (UpgradeProgress.Instance != null && !UpgradeProgress.Instance.TrySpend(amount)) return false;
+
+        Money -= amount;
+        UpdateBalanceText();
+        MoneyChanged?.Invoke(Money);
+        return true;
     }
 }

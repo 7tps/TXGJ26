@@ -2,23 +2,27 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Holds the player's upgrade levels (and anything else that should survive a scene change, like
-// currency). Pure data - no references to gameplay or scene objects, so it works the same whether
+// Holds what should survive a scene change: the shared currency and which tree nodes are owned (the
+// per-upgrade levels live on Upgrades). Pure data - no references to gameplay or scene objects, so it works the same whether
 // it's read from the Upgrade Tree scene, the Lobby, or SampleScene.
 //
-// Lives on a GameObject placed in the Lobby scene (the hub every scene returns to - see
-// GameEngine.ReturnToLobbyAfterDelay), not created automatically. DontDestroyOnLoad carries that one
+// Created automatically before the first scene loads, so it exists whichever scene you press Play in
+// (a copy placed in the Lobby scene just removes itself in Awake). DontDestroyOnLoad carries the one
 // instance across every scene load for the rest of the run. It does NOT currently save to disk, so
 // progress resets when the game is closed - see the note on Load()/Save() below if that should change.
 public class UpgradeProgress : MonoBehaviour
 {
     public static UpgradeProgress Instance { get; private set; }
 
-    public int aimGuideLevel = 0;
-    public int powerLevel = 0;
-    public int frictionLevel = 0;
-    public int bouncyRailsLevel = 0;
-    public int steadyHandLevel = 0;
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetInstance() => Instance = null;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    static void CreateIfMissing()
+    {
+        if (Instance != null) return;
+        new GameObject("UpgradeProgress").AddComponent<UpgradeProgress>();
+    }
 
     // The shared currency spent in the Upgrade Tree, earned back in SampleScene. GameEngine seeds its
     // own local Money from this at Start() and pushes every payout back in via AddMoney, so the total
@@ -63,12 +67,20 @@ public class UpgradeProgress : MonoBehaviour
         // newcomer instead of having two sources of truth.
         if (Instance != null && Instance != this)
         {
+            Debug.Log($"[Diag] UpgradeProgress duplicate in scene '{gameObject.scene.name}' removed; keeping the existing one (${Instance.Money}).");
             Destroy(gameObject);
             return;
         }
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        Debug.Log($"[Diag] UpgradeProgress is now the active instance (created in scene '{gameObject.scene.name}').");
+    }
+
+    // TEMPORARY diagnostics: says when the wallet goes away, and from where
+    void OnDestroy()
+    {
+        if (Instance == this) Debug.LogWarning("[Diag] The active UpgradeProgress was destroyed.\n" + System.Environment.StackTrace);
     }
 
     // To persist across separate play sessions (not just scene changes within one run), add
