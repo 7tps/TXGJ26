@@ -21,23 +21,23 @@ public class GameEngine : MonoBehaviour
 
     [Header("References")]
     [SerializeField] Ball ballPrefab;
-    [SerializeField] Sprite[] ballSprites; 
-    [SerializeField] string spritePrefix = "Balls1_";
+    [SerializeField] Sprite[] ballSprites; // one sprite per ball: "cue ball" for the cue ball, "1".."15" for the rest
     [SerializeField] Transform table;
     [SerializeField] CueStick cueStick;
 
-    // measured in sprite pixels from the centre of the table sprite (y up)
+    // Measured in sprite pixels from the centre of the table sprite (y up). These are specific to
+    // whichever image is on the Table object - re-measure them if that sprite is ever swapped again.
     [Header("Table geometry (sprite pixels)")]
-    [SerializeField] Vector2 feltMin = new Vector2(-232.5f, -126.5f);
-    [SerializeField] Vector2 feltMax = new Vector2(232.5f, 119.5f);
-    [SerializeField] float cornerGap = 26f; // cushions stop this far from each corner
-    [SerializeField] float sideGap = 20f; // half-width of the side pocket openings
-    [SerializeField] float cushionThickness = 40f;
-    [SerializeField] float pocketCaptureRadius = 24f; // a ball whose centre gets this close is pocketed
+    [SerializeField] Vector2 feltMin = new Vector2(-740f, -344f);
+    [SerializeField] Vector2 feltMax = new Vector2(739f, 345f);
+    [SerializeField] float cornerGap = 46f; // cushions stop this far from each corner
+    [SerializeField] float sideGap = 33f; // half-width of the side pocket openings
+    [SerializeField] float cushionThickness = 100f;
+    [SerializeField] float pocketCaptureRadius = 32f; // a ball whose centre gets this close is pocketed
     [SerializeField] Vector2[] pockets =
     {
-        new Vector2(-240.5f, 128.5f), new Vector2(0f, 128.5f), new Vector2(240.5f, 128.5f),
-        new Vector2(-240.5f, -128f), new Vector2(0f, -128f), new Vector2(240.5f, -128f),
+        new Vector2(-726f, 383f), new Vector2(0f, 383f), new Vector2(726f, 383f),
+        new Vector2(-726f, -383f), new Vector2(0f, -383f), new Vector2(726f, -383f),
     };
 
     [Header("Aim guide")]
@@ -441,7 +441,7 @@ public class GameEngine : MonoBehaviour
     Ball SpawnBall(int number, Vector2 pos)
     {
         Ball ball = Instantiate(ballPrefab, pos, Quaternion.identity);
-        ball.Init(number, GetSprite(number == 0 ? 15 : number - 1), ValueOf(number));
+        ball.Init(number, GetSprite(number), ValueOf(number));
         balls.Add(ball);
         return ball;
     }
@@ -454,13 +454,21 @@ public class GameEngine : MonoBehaviour
     // The cue ball (0) is worth nothing
     int ValueOf(int number) => number >= 1 && number <= ballValues.Length ? ballValues[number - 1] : 0;
 
-    Sprite GetSprite(int index)
+    // Looks a ball's sprite up by name: "cue ball" for the cue ball, its own number otherwise. A texture
+    // sliced to a single sprite gets named "<filename>_0" by Unity, so that suffix is stripped before comparing.
+    Sprite GetSprite(int ballNumber)
     {
-        string spriteName = spritePrefix + index;
-        foreach (Sprite s in ballSprites)
-            if (s != null && s.name == spriteName) return s;
+        string expected = ballNumber == 0 ? "cue ball" : ballNumber.ToString();
 
-        Debug.LogError("No ball sprite named " + spriteName + " in GameEngine's Ball Sprites list");
+        foreach (Sprite s in ballSprites)
+        {
+            if (s == null) continue;
+            string spriteName = s.name.EndsWith("_0") ? s.name[..^2] : s.name;
+            if (string.Equals(spriteName, expected, StringComparison.OrdinalIgnoreCase)) return s;
+        }
+
+        string who = ballNumber == 0 ? "the cue ball" : "ball " + ballNumber;
+        Debug.LogError($"No sprite found for {who} in GameEngine's Ball Sprites list (looked for \"{expected}\")");
         return null;
     }
 
