@@ -63,6 +63,20 @@ public class GameEngine : MonoBehaviour
 
     public State CurrentState { get; private set; }
 
+    [Header("Balls per night")]
+    [SerializeField] int startingBalls = 1; // object balls on night 1
+    [SerializeField] int ballsAddedPerNight = 2;
+    const int MaxBalls = 15;
+
+    // Static so it survives the scene reloads between rounds (this GameEngine is destroyed each time).
+    public static int NightNumber { get; private set; }
+
+    // Starts every Play session back at night 0, even if "Reload Domain" is ever turned off in Project Settings
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetNightNumber() => NightNumber = 0;
+
+    public int BallsForTonight => Mathf.Clamp(startingBalls + ballsAddedPerNight * (Mathf.Max(1, NightNumber) - 1), 1, MaxBalls);
+
     // where a moving ball ends up and how a collision changes things
     public class ShotPrediction
     {
@@ -121,6 +135,9 @@ public class GameEngine : MonoBehaviour
 
     void Start()
     {
+        // Every load of this scene (coming back from the menu) is the next night
+        NightNumber++;
+
         if (table == null) table = GameObject.Find("Table").transform;
         if (cueStick == null) cueStick = FindFirstObjectByType<CueStick>();
 
@@ -131,7 +148,7 @@ public class GameEngine : MonoBehaviour
             if (Upgrades.Instance.HasAimGuide) guideBounces = Upgrades.Instance.CurrentGuideBounces;
             cushionBounciness = Upgrades.Instance.CurrentCushionBounciness;
             Money = Upgrades.Instance.Money;
-            Upgrades.Instance.BeginNightIfNeeded();
+            Upgrades.Instance.StartNewNight();
         }
 
         UpdateBalanceText();
@@ -704,9 +721,10 @@ public class GameEngine : MonoBehaviour
     {
         cueBall = SpawnBall(0, HeadSpot());
 
-        // Ball Value upgrade (tier 1): how many object balls make the rack. Starts at 1 (per the lore:
-        // you can't handle more yet) and grows toward the normal 15 via the Expanded Rack upgrade.
-        int rackSize = Upgrades.Instance != null ? Upgrades.Instance.RackSize : 15;
+        // Tonight's count from the night tracker, plus any extra balls bought with Expanded Rack
+        // (RackSize starts at 1, so RackSize - 1 is the number of extras)
+        int extraFromUpgrade = Upgrades.Instance != null ? Upgrades.Instance.RackSize - 1 : 0;
+        int rackSize = Mathf.Clamp(BallsForTonight + extraFromUpgrade, 1, MaxBalls);
 
         List<int> numbers = new List<int>();
         for (int n = 1; n <= 15; n++)
@@ -722,35 +740,16 @@ public class GameEngine : MonoBehaviour
 
         List<Ball> spawned = new List<Ball>();
 
-        if (rackSize >= 15)
+        // Same triangle spots as the full rack, 8-ball fixed in the middle, filled from the apex row by
+        // row - a smaller rack just stops before the later spots
+        int next = 0;
+        for (int row = 0; row < 5 && spawned.Count < rackSize; row++)
         {
-            // full triangular rack, 8-ball fixed in the middle
-            int next = 0;
-            for (int row = 0; row < 5; row++)
+            for (int i = 0; i <= row && spawned.Count < rackSize; i++)
             {
-                for (int i = 0; i <= row; i++)
-                {
-                    Vector2 pos = apex + new Vector2(row * spacing * 0.866f, (i - row / 2f) * spacing);
-                    int number = (row == 2 && i == 1) ? 8 : numbers[next++];
-                    spawned.Add(SpawnBall(number, pos));
-                }
-            }
-        }
-        else
-        {
-            // a partial rack (below the normal 15): no triangle shape, just a simple line of however
-            // many balls the Expanded Rack upgrade allows so far
-            List<int> partialNumbers = new List<int>(numbers) { 8 };
-            for (int i = partialNumbers.Count - 1; i > 0; i--)
-            {
-                int j = UnityEngine.Random.Range(0, i + 1);
-                (partialNumbers[i], partialNumbers[j]) = (partialNumbers[j], partialNumbers[i]);
-            }
-
-            for (int i = 0; i < rackSize; i++)
-            {
-                Vector2 pos = apex + new Vector2(i * spacing, 0f);
-                spawned.Add(SpawnBall(partialNumbers[i], pos));
+                Vector2 pos = apex + new Vector2(row * spacing * 0.866f, (i - row / 2f) * spacing);
+                int number = (row == 2 && i == 1) ? 8 : numbers[next++];
+                spawned.Add(SpawnBall(number, pos));
             }
         }
 

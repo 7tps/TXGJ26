@@ -8,6 +8,19 @@ public class Upgrades : MonoBehaviour
     // values from here (Instance) when they wake up, instead of this script pushing into them.
     public static Upgrades Instance { get; private set; }
 
+    // Runs once when the game starts, before the first scene loads, whichever scene you press Play in.
+    // Guarantees an Upgrades object exists even if none was placed in a scene. A scene-placed one
+    // loaded later sees this one already set as Instance and removes itself (see Awake).
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetInstance() => Instance = null;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    static void CreateIfMissing()
+    {
+        if (Instance != null) return;
+        new GameObject("Upgrades").AddComponent<Upgrades>();
+    }
+
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -57,9 +70,9 @@ public class Upgrades : MonoBehaviour
             nightTimeLeft = Mathf.Max(0f, nightTimeLeft - Time.deltaTime);
     }
 
-    public void BeginNightIfNeeded()
+    // Called every time the table scene loads: a fresh night with a full timer
+    public void StartNewNight()
     {
-        if (nightInProgress && nightTimeLeft > 0f) return;
         nightInProgress = true;
         nightTimeLeft = NightLength;
         roundsClearedTonight = 0;
