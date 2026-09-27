@@ -21,7 +21,16 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     static readonly Color OwnedTint = new Color(0.55f, 1f, 0.55f);
     static readonly Color LockedTextColor = new Color(0.55f, 0.55f, 0.55f);
 
-    void OnEnable() => Refresh();
+    // Subscribed rather than polled: buying one node (or earning money back in SampleScene) can change
+    // whether a sibling node is still affordable, so every node needs to hear about it, not just the
+    // one that was clicked.
+    void OnEnable()
+    {
+        UpgradeProgress.Changed += Refresh;
+        Refresh();
+    }
+
+    void OnDisable() => UpgradeProgress.Changed -= Refresh;
 
     // Wired to this node's Button.OnClick
     public void Buy()
@@ -30,6 +39,7 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
         UpgradeProgress progress = UpgradeProgress.Instance;
         if (def == null || progress == null) return;
         if (progress.IsOwned(nodeId) || progress.IsExcluded(nodeId) || !IsUnlocked(def, progress)) return;
+        if (!progress.TrySpend(UpgradeTreeData.CostOf(nodeId))) return; // can't afford it yet
 
         progress.Own(nodeId);
         if (def.exclusiveWith != null) progress.Exclude(def.exclusiveWith);
@@ -75,6 +85,11 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
             case "table_know_the_rails": // ditto - the milestone doubles as lively rails' final step
                 upgrades.BuyBouncierRails();
                 break;
+
+            case "cue_steady_hand_1":
+            case "cue_steady_hand_2":
+                upgrades.UpgradeSteadyHand();
+                break;
         }
     }
 
@@ -87,6 +102,12 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
         frame.sprite = def.type == UpgradeNodeType.Milestone || def.type == UpgradeNodeType.Capstone
             ? milestoneFrame
             : defaultFrame;
+
+        // Selectable's SpriteSwap transition (used below for the locked/unlocked states) works by
+        // setting Image.overrideSprite, not Image.sprite - so once a node has been shown locked, that
+        // override keeps rendering on top of frame.sprite above and hides it, even after switching to
+        // Transition.None, unless it's explicitly cleared here.
+        frame.overrideSprite = null;
 
         if (progress.IsOwned(nodeId))
         {
@@ -107,10 +128,14 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
         }
         else
         {
+            // Unlocked by the tree, but still needs the node's cost overlay to say whether it's
+            // actually affordable right now - reuses the locked text color as a "not yet" dim rather
+            // than adding a fourth visual state.
+            bool canAfford = progress.Money >= UpgradeTreeData.CostOf(nodeId);
             frame.color = Color.white;
             button.transition = Selectable.Transition.SpriteSwap;
-            button.interactable = true;
-            if (nameText != null) nameText.color = Color.white;
+            button.interactable = canAfford;
+            if (nameText != null) nameText.color = canAfford ? Color.white : LockedTextColor;
             if (lockOverlay != null) lockOverlay.SetActive(false);
         }
     }
@@ -118,8 +143,11 @@ public class UpgradeTreeNodeUI : MonoBehaviour, IPointerEnterHandler, IPointerEx
     public void OnPointerEnter(PointerEventData eventData)
     {
         UpgradeNodeDef def = UpgradeTreeData.Get(nodeId);
+        UpgradeProgress progress = UpgradeProgress.Instance;
         if (def == null || Tooltip.Instance == null) return;
-        Tooltip.Instance.Show($"<b>{def.label}</b>\n{def.description}");
+
+        string costLine = progress != null && progress.IsOwned(nodeId) ? "Owned" : $"Cost: ${UpgradeTreeData.CostOf(nodeId)}";
+        Tooltip.Instance.Show($"<b>{def.label}</b>\n{def.description}\n\n{costLine}");
     }
 
     public void OnPointerExit(PointerEventData eventData)

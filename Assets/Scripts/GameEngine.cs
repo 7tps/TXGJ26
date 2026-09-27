@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -86,6 +87,7 @@ public class GameEngine : MonoBehaviour
     Ball cueBall;
     float captureRadiusWorld;
     Vector2 feltMinWorld, feltMaxWorld;
+    bool roundEnding; // true once every numbered ball is pocketed, so Update() stops re-arming the cue for another shot
 
     void Start()
     {
@@ -93,6 +95,7 @@ public class GameEngine : MonoBehaviour
         if (cueStick == null) cueStick = FindFirstObjectByType<CueStick>();
 
         baseCushionBounciness = cushionBounciness;
+        if (UpgradeProgress.Instance != null) Money = UpgradeProgress.Instance.Money;
         UpdateBalanceText();
         BuildTable();
         SpawnBalls();
@@ -118,13 +121,14 @@ public class GameEngine : MonoBehaviour
 
         GuideBounces = progress.aimGuideLevel;
         cueStick.ApplyPowerLevel(progress.powerLevel);
+        cueStick.ApplySteadyHandLevel(progress.steadyHandLevel);
         ApplyCushionBouncinessLevel(progress.bouncyRailsLevel);
         foreach (Ball ball in balls) ball.ApplyFrictionLevel(progress.frictionLevel);
     }
 
     void Update()
     {
-        if (CurrentState == State.BallsMoving && balls.TrueForAll(b => b.IsSettled))
+        if (CurrentState == State.BallsMoving && !roundEnding && balls.TrueForAll(b => b.IsSettled))
             BeginAiming();
     }
 
@@ -195,12 +199,28 @@ public class GameEngine : MonoBehaviour
             // Value x this ball's own multiplier
             int payout = ball.Payout;
             Money += payout;
+            UpgradeProgress.Instance?.AddMoney(payout); // carries the earning back into the Upgrade Tree's shared total
             Debug.Log($"Pocketed ball {ball.number}: ${ball.Value} x {ball.Multiplier:0.0#} = ${payout} (total ${Money})");
             UpdateBalanceText();
             MoneyChanged?.Invoke(Money);
         }
 
         BallPocketed?.Invoke(ball);
+
+        // Only numbered balls count - the cue ball gets respawned on the next aiming phase (scratch),
+        // so it never actually stays pocketed once the round is under way.
+        if (!ball.IsCueBall && balls.TrueForAll(b => b.IsCueBall || b.IsPocketed))
+        {
+            roundEnding = true;
+            cueStick.Hide(); // locks out aiming/shooting for the delay before the scene switch
+            StartCoroutine(ReturnToLobbyAfterDelay());
+        }
+    }
+
+    IEnumerator ReturnToLobbyAfterDelay()
+    {
+        yield return new WaitForSeconds(2f);
+        SceneManager.LoadScene("Lobby");
     }
 
     // PREDICTION

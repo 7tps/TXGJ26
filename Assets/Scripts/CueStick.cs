@@ -1,4 +1,5 @@
 using System;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -23,7 +24,16 @@ public class CueStick : MonoBehaviour
     [SerializeField] float pullPerLevel = 1f; // added to maxPull per upgrade level
     [SerializeField] float speedPerLevel = 5f; // added to maxShotSpeed per upgrade level
 
+    [Header("Steady Hand power readout")]
+    [SerializeField] float readoutFontSize = 3f;
+    [SerializeField] float readoutGap = 0.15f; // space between the top of the cue ball and the readout (world units)
+    [SerializeField] int readoutBarSegments = 20;
+    static readonly float[] PowerCurveByLevel = { 1f, 1.3f, 1.6f }; // level 0-2; higher = finer control at low/mid power
+
     float baseMaxPull, baseMaxShotSpeed; // maxPull/maxShotSpeed at level 0, captured before any upgrade is applied
+    float powerCurve = 1f; // 1 = linear; Steady Hand raises it for finer control at low/mid power
+    bool showPowerReadout;
+    TextMeshPro powerLabel;
 
     enum Phase { Hidden, Aiming, Charging, Striking, FollowThrough }
 
@@ -51,9 +61,16 @@ public class CueStick : MonoBehaviour
         get
         {
             if (phase == Phase.Aiming) return maxShotSpeed;
-            if (phase == Phase.Charging && pull >= minPull) return pull / maxPull * maxShotSpeed;
+            if (phase == Phase.Charging && pull >= minPull) return PowerFraction(pull) * maxShotSpeed;
             return 0f;
         }
+    }
+
+    // 0-1 power for a given pull. Full pull is always full power; the curve only reshapes the middle.
+    float PowerFraction(float pullAmount)
+    {
+        if (maxPull <= 0f) return 0f;
+        return Mathf.Pow(Mathf.Clamp01(pullAmount / maxPull), powerCurve);
     }
 
     void Awake()
@@ -65,6 +82,46 @@ public class CueStick : MonoBehaviour
         baseMaxPull = maxPull;
         baseMaxShotSpeed = maxShotSpeed;
         Hide();
+    }
+
+    void OnDestroy()
+    {
+        if (powerLabel != null) Destroy(powerLabel.gameObject);
+    }
+
+    // Not parented to the cue: the cue rotates, and a child would need re-parenting if the cue is ever
+    // pooled/cloned (e.g. a future second cue ball).
+    void CreatePowerLabel()
+    {
+        powerLabel = new GameObject("Power Readout").AddComponent<TextMeshPro>();
+        powerLabel.fontSize = readoutFontSize;
+        powerLabel.alignment = TextAlignmentOptions.Bottom;
+        powerLabel.rectTransform.pivot = new Vector2(0.5f, 0f);
+        powerLabel.rectTransform.sizeDelta = new Vector2(6f, 1f);
+        powerLabel.color = Color.white;
+        powerLabel.outlineWidth = 0.25f;
+        powerLabel.outlineColor = Color.black;
+        powerLabel.sortingOrder = 21; // above the cue
+        powerLabel.gameObject.SetActive(false);
+    }
+
+    void UpdatePowerLabel()
+    {
+        if (powerLabel == null) return;
+
+        bool visible = showPowerReadout && phase == Phase.Charging;
+        powerLabel.gameObject.SetActive(visible);
+        if (!visible) return;
+
+        bool willShoot = pull >= minPull;
+        float fraction = willShoot ? PowerFraction(pull) : 0f;
+        int filled = Mathf.RoundToInt(fraction * readoutBarSegments);
+
+        string bar = $"<color=#FFE066>{new string('|', filled)}</color><color=#555555>{new string('|', readoutBarSegments - filled)}</color>";
+        string percent = willShoot ? $"{fraction * 100f:0}%" : "<color=#888888>cancel</color>";
+        powerLabel.text = $"{percent}\n{bar}";
+
+        powerLabel.transform.position = (Vector3)(cueBall.Rb.position + Vector2.up * (cueBall.WorldRadius + readoutGap));
     }
 
     public void Show(Ball ball)
@@ -81,6 +138,7 @@ public class CueStick : MonoBehaviour
     {
         phase = Phase.Hidden;
         sr.enabled = false;
+        UpdatePowerLabel();
     }
 
     void Update()
@@ -137,6 +195,7 @@ public class CueStick : MonoBehaviour
 
         tipDistance = tipGap + pull;
         UpdateTransform();
+        UpdatePowerLabel();
     }
 
     void Release()
@@ -149,8 +208,9 @@ public class CueStick : MonoBehaviour
         }
 
         // The further the cue was pulled back, the faster it comes forward
-        strikeSpeed = pull / maxPull * maxShotSpeed;
+        strikeSpeed = PowerFraction(pull) * maxShotSpeed;
         phase = Phase.Striking;
+        UpdatePowerLabel();
     }
 
     // Drives the cue forward until the tip touches the ball, then hands the ball the cue's speed
@@ -189,5 +249,14 @@ public class CueStick : MonoBehaviour
     {
         maxPull = baseMaxPull + level * pullPerLevel;
         maxShotSpeed = baseMaxShotSpeed + level * speedPerLevel;
+    }
+
+    // Sets the power curve (and whether the readout shows) from the upgrade level directly, same
+    // reasoning as ApplyPowerLevel above - safe to call every time SampleScene loads.
+    public void ApplySteadyHandLevel(int level)
+    {
+        powerCurve = PowerCurveByLevel[Mathf.Clamp(level, 0, PowerCurveByLevel.Length - 1)];
+        showPowerReadout = level > 0;
+        if (showPowerReadout && powerLabel == null) CreatePowerLabel();
     }
 }

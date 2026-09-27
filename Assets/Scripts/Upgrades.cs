@@ -32,6 +32,18 @@ public class Upgrades : MonoBehaviour
         Progress.powerLevel++;
     }
 
+    [Space(15)]
+    [Header("Cue - Steady Hand")]
+    [SerializeField] int maxSteadyHandLevel = 2; // cue_steady_hand_1 and _2 in the tree
+
+    public bool CanUpgradeSteadyHand => Progress.steadyHandLevel < maxSteadyHandLevel;
+
+    public void UpgradeSteadyHand()
+    {
+        if (!CanUpgradeSteadyHand) return;
+        Progress.steadyHandLevel++;
+    }
+
     [Header("Table Upgrades")]
     [Space(15)]
     [Header("Table - Smooth Felt")]

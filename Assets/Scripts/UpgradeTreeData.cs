@@ -250,4 +250,41 @@ public static class UpgradeTreeData
         }
         return byId.TryGetValue(id, out UpgradeNodeDef found) ? found : null;
     }
+
+    // Placeholder balance curve - not from the design doc. Nothing costed money at all until this was
+    // added, so this just gives every node *some* price (a base amount for its type, plus a bit more
+    // per step of chain depth) rather than leaving the tree free. Retune these two constants once the
+    // economy (ball payouts, run length) actually gets a balance pass.
+    static readonly Dictionary<UpgradeNodeType, int> BaseCostByType = new Dictionary<UpgradeNodeType, int>
+    {
+        { UpgradeNodeType.Root, 0 },
+        { UpgradeNodeType.Stat, 40 },
+        { UpgradeNodeType.Conditional, 90 },
+        { UpgradeNodeType.Twist, 130 },
+        { UpgradeNodeType.Milestone, 350 },
+        { UpgradeNodeType.Exclusive, 280 },
+        { UpgradeNodeType.Capstone, 800 },
+    };
+    const int CostPerDepth = 30;
+
+    static Dictionary<string, int> depthCache;
+
+    public static int CostOf(string id)
+    {
+        UpgradeNodeDef def = Get(id);
+        return def == null ? 0 : BaseCostByType[def.type] + Depth(id) * CostPerDepth;
+    }
+
+    // How many links from the centre/a branch root this node sits - 0 for the centre itself and for
+    // the capstone (it's gated by the four milestones, not a normal parent, so depth doesn't apply).
+    static int Depth(string id)
+    {
+        if (depthCache == null) depthCache = new Dictionary<string, int>();
+        if (depthCache.TryGetValue(id, out int cached)) return cached;
+
+        UpgradeNodeDef def = Get(id);
+        int depth = def?.parent == null ? 0 : Depth(def.parent) + 1;
+        depthCache[id] = depth;
+        return depth;
+    }
 }

@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -17,6 +18,11 @@ public class UIScript : MonoBehaviour
         
     }
 
+    public void swapScene(String sceneToSwap)
+    {
+        SceneManager.LoadScene(sceneToSwap);
+    }
+    
     public void redrawCueStick()
     {
         Ball cueBall = gameEngine.getBall(0);

@@ -181,6 +181,7 @@ public static class BuildUpgradeTreeScene
         BuildBackground(canvasT);
         BuildTitle(canvasT);
         BuildBackButton(canvasT);
+        BuildMoneyText(canvasT);
 
         Upgrades upgrades = new GameObject("UpgradeSystem").AddComponent<Upgrades>();
 
@@ -426,6 +427,26 @@ public static class BuildUpgradeTreeScene
         rt.sizeDelta = new Vector2(220, 70);
 
         BuildLabel(go.transform, "Back", Vector2.zero, new Vector2(220, 70), 32, Color.white);
+    }
+
+    // Shows UpgradeProgress.Money in the top-right corner, refreshed by UpgradeMoneyDisplay - the same
+    // component Lobby's own "Money Text" object uses (see EnsureUpgradeProgressInLobby), so both scenes
+    // read from one place instead of duplicating the refresh logic.
+    static void BuildMoneyText(Transform parent)
+    {
+        TextMeshProUGUI text = BuildLabel(parent, "$0", Vector2.zero, new Vector2(260, 60), 40, Color.white);
+        text.gameObject.name = "Money Text";
+        text.alignment = TextAlignmentOptions.Right;
+
+        RectTransform rt = text.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = new Vector2(-40, -40);
+
+        UpgradeMoneyDisplay display = text.gameObject.AddComponent<UpgradeMoneyDisplay>();
+        SerializedObject so = new SerializedObject(display);
+        so.FindProperty("text").objectReferenceValue = text;
+        so.ApplyModifiedPropertiesWithoutUndo();
     }
 
     // The pannable/zoomable area below the title. PanZoom sits on Viewport (an ancestor of every node
