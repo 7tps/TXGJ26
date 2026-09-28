@@ -145,6 +145,7 @@ public class TutorialDirector : MonoBehaviour
 
     void HandleScene(string loaded)
     {
+        loaded = TutorialSession.Normalize(loaded); // the real Lobby/Upgrade Tree count as the tutorial's
         sceneName = loaded;
         engine = FindFirstObjectByType<GameEngine>();
         cue = FindFirstObjectByType<CueStick>();
@@ -236,7 +237,7 @@ public class TutorialDirector : MonoBehaviour
     }
 
     // Loading a real scene ends the tutorial: TutorialSession swaps the real state back in
-    public void ExitTutorial() => SceneManager.LoadScene(TutorialSession.ReturnScene);
+    public void ExitTutorial() => TutorialSession.ExitTo(TutorialSession.ReturnScene);
 
     void Complete(bool autoAdvance)
     {
@@ -346,7 +347,7 @@ public class TutorialDirector : MonoBehaviour
         Place(titleText.rectTransform, new Vector2(0, 1), new Vector2(20, -10), new Vector2(700, 48));
 
         progressText = Label(panel, "Progress", font, 26, Muted, TextAlignmentOptions.TopRight);
-        Place(progressText.rectTransform, new Vector2(1, 1), new Vector2(-20, -12), new Vector2(200, 40));
+        Place(progressText.rectTransform, new Vector2(1, 1), new Vector2(-206, -12), new Vector2(160, 40));
 
         bodyText = Label(panel, "Body", font, 26, Color.white, TextAlignmentOptions.TopLeft);
         RectTransform body = bodyText.rectTransform;
@@ -363,7 +364,7 @@ public class TutorialDirector : MonoBehaviour
         Place(hintText.rectTransform, new Vector2(0, 0), new Vector2(20, 10), new Vector2(760, 30));
 
         // Stacked in the right-hand column: Next above, Exit below
-        nextButton = MakeButton(panel, "Next Button", font, "Next", new Color(0.25f, 0.55f, 0.3f), new Vector2(-16, 76), out nextLabel);
+        nextButton = MakeButton(panel, "Next Button", font, "Next", new Color(0.25f, 0.55f, 0.3f), new Vector2(-16, 140), out nextLabel);
         nextButton.onClick.AddListener(Next);
 
         Button exit = MakeButton(panel, "Exit Button", font, "Exit Tutorial", new Color(0.6f, 0.22f, 0.22f), new Vector2(-16, 12), out _);

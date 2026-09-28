@@ -41,16 +41,35 @@ public static class TutorialSession
         sceneName == SceneName || sceneName == LobbySceneName || sceneName == TreeSceneName;
 
     // If a tutorial copy hasn't been made yet (Tools/Build Tutorial not run), the real scene loads
-    // instead - which simply ends the tutorial and restores the real state, rather than erroring
+    // instead - but the tutorial stays running there on its own state (see StaysInTutorial)
     public static string Route(string sceneName) =>
         Active && Routes.TryGetValue(sceneName, out string tutorialCopy) && Application.CanStreamedLevelBeLoaded(tutorialCopy)
             ? tutorialCopy
             : sceneName;
 
+    // The tutorial's name for a scene: real Main/Lobby/Upgrade Tree count as their tutorial copies
+    public static string Normalize(string sceneName) =>
+        Routes.TryGetValue(sceneName, out string tutorialCopy) ? tutorialCopy : sceneName;
+
+    // While the tutorial runs, the real Lobby and Upgrade Tree also keep it running (used when their
+    // tutorial copies don't exist yet). Only Exit/Finish or any other scene ends it.
+    static bool StaysInTutorial(string sceneName) => IsTutorialScene(Normalize(sceneName)) && !exiting;
+
+    static bool exiting;
+
+    // Exit/Finish: ends the tutorial on the next load, whichever scene that is
+    public static void ExitTo(string sceneName)
+    {
+        exiting = true;
+        if (!Application.CanStreamedLevelBeLoaded(sceneName)) sceneName = "Lobby";
+        UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     static void ResetState()
     {
         Active = false;
+        exiting = false;
         ReturnScene = FallbackReturnScene;
         currentScene = null;
         SceneManager.sceneLoaded -= OnSceneLoaded;
@@ -66,16 +85,16 @@ public static class TutorialSession
     {
         if (mode != LoadSceneMode.Single) return;
 
-        bool tutorialScene = IsTutorialScene(scene);
-        if (tutorialScene && !Active)
+        if (!Active && IsTutorialScene(scene))
         {
             ReturnScene = string.IsNullOrEmpty(currentScene) || IsTutorialScene(currentScene) ? FallbackReturnScene : currentScene;
             Enter();
         }
-        else if (!tutorialScene && Active)
+        else if (Active && !StaysInTutorial(scene.name))
         {
             Exit();
         }
+        exiting = false;
 
         currentScene = scene.name;
         if (Active) TutorialDirector.OnSceneLoaded(scene);
