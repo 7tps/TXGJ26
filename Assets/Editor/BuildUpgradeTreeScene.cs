@@ -309,7 +309,7 @@ public static class BuildUpgradeTreeScene
 
     // ---- Import fix ----
 
-    static void FixSpriteImport(string path)
+    internal static void FixSpriteImport(string path)
     {
         var importer = AssetImporter.GetAtPath(path) as TextureImporter;
         if (importer == null)
@@ -332,7 +332,7 @@ public static class BuildUpgradeTreeScene
         if (changed) importer.SaveAndReimport();
     }
 
-    static Sprite LoadSprite(string path)
+    internal static Sprite LoadSprite(string path)
     {
         foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(path))
             if (asset is Sprite sprite) return sprite;
@@ -342,8 +342,9 @@ public static class BuildUpgradeTreeScene
     }
 
     // ---- Scene scaffolding ----
+    // (internal so BuildTableFeesScene builds its scene from the same pieces)
 
-    static void BuildCamera()
+    internal static void BuildCamera()
     {
         GameObject go = new GameObject("Main Camera");
         go.tag = "MainCamera";
@@ -353,14 +354,14 @@ public static class BuildUpgradeTreeScene
         cam.backgroundColor = Color.black;
     }
 
-    static void BuildEventSystem()
+    internal static void BuildEventSystem()
     {
         GameObject go = new GameObject("EventSystem");
         go.AddComponent<UnityEngine.EventSystems.EventSystem>();
         go.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
     }
 
-    static Canvas BuildCanvas()
+    internal static Canvas BuildCanvas()
     {
         GameObject go = new GameObject("Canvas");
         Canvas canvas = go.AddComponent<Canvas>();
@@ -375,7 +376,7 @@ public static class BuildUpgradeTreeScene
         return canvas;
     }
 
-    static void BuildBackground(Transform parent)
+    internal static void BuildBackground(Transform parent)
     {
         GameObject go = new GameObject("Background", typeof(RectTransform));
         go.transform.SetParent(parent, false);
@@ -430,7 +431,7 @@ public static class BuildUpgradeTreeScene
     // Shows UpgradeProgress.Money in the top-right corner, refreshed by UpgradeMoneyDisplay - the same
     // component Lobby's own "Money Text" object uses (see EnsureUpgradeProgressInLobby), so both scenes
     // read from one place instead of duplicating the refresh logic.
-    static void BuildMoneyText(Transform parent)
+    internal static void BuildMoneyText(Transform parent)
     {
         TextMeshProUGUI text = BuildLabel(parent, "$0", Vector2.zero, new Vector2(260, 60), 40, Color.white);
         text.gameObject.name = "Money Text";
@@ -698,7 +699,7 @@ public static class BuildUpgradeTreeScene
     }
 
     // A UI text object anchored to its parent's centre, offset by `anchoredPos`.
-    static TextMeshProUGUI BuildLabel(Transform parent, string content, Vector2 anchoredPos, Vector2 size,
+    internal static TextMeshProUGUI BuildLabel(Transform parent, string content, Vector2 anchoredPos, Vector2 size,
         float fontSize, Color color)
     {
         GameObject go = new GameObject(content + " Label", typeof(RectTransform));

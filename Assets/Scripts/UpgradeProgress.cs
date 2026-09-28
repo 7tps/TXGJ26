@@ -55,6 +55,15 @@ public class UpgradeProgress : MonoBehaviour
     public void Own(string nodeId) { ownedNodes.Add(nodeId); Changed?.Invoke(); }
     public void Exclude(string nodeId) { excludedNodes.Add(nodeId); Changed?.Invoke(); }
 
+    // Losing the run (walking out on the table fees) throws away the wallet and every owned node: the
+    // old instance is destroyed and a fresh, empty one takes its place
+    public static void ResetRun()
+    {
+        if (Instance != null) Destroy(Instance.gameObject);
+        Instance = null;
+        CreateIfMissing();
+    }
+
     // Raised after money or ownership changes, so tree UI (and a money readout) can refresh without
     // polling every frame. Node buttons other than the one just bought need this too, since buying one
     // node can change whether a sibling is still affordable.

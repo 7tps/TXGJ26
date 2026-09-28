@@ -9,8 +9,8 @@ using UnityEngine.UI;
 //
 // A night is one 60s timer (Upgrades.NightLength) that keeps running as you move between the Lobby,
 // Main and Upgrade Tree. When it hits 0 the player is sent back to the Lobby and Main / Upgrade Tree stay
-// locked until they enter the Table Fees scene. Loading a clock scene with no night running (and no fees
-// owed) starts the next one.
+// locked until the fees are paid in the Table Fees scene (see TableFees), which in turn can only be entered
+// once the night is over. Loading a clock scene with no night running (and no fees owed) starts the next one.
 //
 // Like UpgradeProgress this creates itself before the first scene loads and survives scene changes, and it
 // builds its own overlay UI, so nothing has to be placed in any scene.
@@ -40,16 +40,23 @@ public class NightClock : MonoBehaviour
     // Scenes that show the clock and count as part of the night
     static bool IsNightScene(string scene) => scene == LobbyScene || scene == MainScene || scene == UpgradeTreeScene;
 
-    // Main and Upgrade Tree can't be entered while the night's fees are still owed
-    public static bool IsLocked(string scene) =>
-        Upgrades.Instance != null && Upgrades.Instance.FeesDue && (scene == MainScene || scene == UpgradeTreeScene);
+    // Main and Upgrade Tree can't be entered while the night's fees are still owed, and Table Fees can't be
+    // entered until they are
+    public static bool IsLocked(string scene)
+    {
+        Upgrades up = Upgrades.Instance;
+        if (up == null) return false;
+        if (scene == TableFeesScene) return !up.FeesDue;
+        return up.FeesDue && (scene == MainScene || scene == UpgradeTreeScene);
+    }
 
     // Use this instead of SceneManager.LoadScene for buttons that move between scenes, so the lock applies
     public static bool TryLoadScene(string scene)
     {
         if (IsLocked(scene))
         {
-            Debug.Log($"[NightClock] '{scene}' is locked - the night is over and the table fees are due.");
+            string reason = scene == TableFeesScene ? "nothing is owed until the night is over" : "the night is over and the table fees are due";
+            Debug.Log($"[NightClock] '{scene}' is locked - {reason}.");
             return false;
         }
 
@@ -95,9 +102,7 @@ public class NightClock : MonoBehaviour
         Upgrades up = Upgrades.Instance;
         if (up != null)
         {
-            if (scene.name == TableFeesScene)
-                up.ClearFeesLock();
-            else if (IsLocked(scene.name))
+            if (IsLocked(scene.name))
                 SceneManager.LoadScene(LobbyScene); // safety net for anything that loaded a locked scene directly
             else if (IsNightScene(scene.name))
                 up.BeginNightIfNeeded();
@@ -133,7 +138,9 @@ public class NightClock : MonoBehaviour
         if (!visible) return;
 
         Upgrades up = Upgrades.Instance;
-        feesLabel.gameObject.SetActive(up != null && up.FeesDue);
+        bool feesDue = up != null && up.FeesDue;
+        if (feesDue && !feesLabel.gameObject.activeSelf) feesLabel.text = $"Night over - pay your ${up.CurrentTableFee:N0} table fees";
+        feesLabel.gameObject.SetActive(feesDue);
 
         if (frames == null || frames.Length == 0) return;
 

@@ -46,7 +46,8 @@ public class Upgrades : MonoBehaviour
     [SerializeField] bool nightInProgress;
     [SerializeField] float nightTimeLeft;
     [SerializeField] float nightDuration; // this night's total, so the clock can show elapsed / total
-    [SerializeField] bool feesDue; // the night ended and the table fees haven't been visited yet - locks Main and the Upgrade Tree (see NightClock)
+    [SerializeField] bool feesDue; // the night ended and the table fees haven't been paid yet - locks Main and the Upgrade Tree (see NightClock)
+    [SerializeField] int nightsPaid; // table fees paid so far this run - each one raises the next bill
     [SerializeField] int roundsClearedTonight;
     [SerializeField] int hotStreak;
 
@@ -105,9 +106,38 @@ public class Upgrades : MonoBehaviour
         feesDue = true;
     }
 
-    // Lifts the Main / Upgrade Tree lock. NightClock calls this when the Table Fees scene loads; the
-    // fees system can also call it directly once the bill is paid
+    // Lifts the Main / Upgrade Tree lock. PayTableFee calls this once the bill is paid
     public void ClearFeesLock() { feesDue = false; }
+
+    // ---- Night - Table Fees ----
+    // After every night the bar bills you for the table before you can play again, and every bill paid
+    // makes the next one bigger: baseTableFee x tableFeeGrowth ^ nightsPaid (20, 30, 45, 68, 101...).
+    // Not paying loses the run (see TableFees).
+    [Header("Night - Table Fees")]
+    [SerializeField] int baseTableFee = 20;
+    [SerializeField] float tableFeeGrowth = 1.5f;
+
+    public int NightsPaid => nightsPaid;
+    public int CurrentTableFee => Mathf.RoundToInt(baseTableFee * Mathf.Pow(tableFeeGrowth, nightsPaid));
+    public bool CanAffordTableFee => UpgradeProgress.Instance != null && UpgradeProgress.Instance.Money >= CurrentTableFee;
+
+    // Pays tonight's bill if it's due and affordable, and reports whether it went through
+    public bool PayTableFee()
+    {
+        if (!feesDue || !Pay(CurrentTableFee)) return false;
+        nightsPaid++;
+        ClearFeesLock();
+        return true;
+    }
+
+    // Losing the run (walking out on the table fees) throws away every upgrade and all the night state:
+    // the old instance is destroyed and a fresh one with the defaults takes its place
+    public static void ResetRun()
+    {
+        if (Instance != null) Destroy(Instance.gameObject);
+        Instance = null;
+        CreateIfMissing();
+    }
 
     [Header("Cue Ball Upgrades")]
     [Space(15)]
