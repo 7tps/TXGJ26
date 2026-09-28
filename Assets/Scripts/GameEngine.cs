@@ -17,6 +17,9 @@ public class GameEngine : MonoBehaviour
 
     public int Money { get; private set; }
 
+    // The persistent wallet (in the tutorial, TutorialSession has swapped in the tutorial's own one)
+    static UpgradeProgress Wallet => UpgradeProgress.Instance;
+
     [Header("Scoring")]
     [SerializeField] TMP_Text balanceText; // shows the total balance
     [SerializeField] TMP_Text timerText; // optional, shows time left tonight
@@ -138,8 +141,10 @@ public class GameEngine : MonoBehaviour
             Upgrades.Instance.StartNewNight();
         }
 
+        if (Rent.Instance != null) Rent.Instance.RecordNightStarted();
+
         // The shared wallet lives on UpgradeProgress; Money here is just this scene's mirror of it
-        if (UpgradeProgress.Instance != null) Money = UpgradeProgress.Instance.Money;
+        if (Wallet != null) Money = Wallet.Money;
 
         UpdateBalanceText();
         UpdateTimerText();
@@ -222,6 +227,7 @@ public class GameEngine : MonoBehaviour
         }
 
         bool cleared = RackCleared();
+
         if (cleared && up != null)
         {
             Earn(up.CleanSweepPayout);
@@ -444,7 +450,7 @@ public class GameEngine : MonoBehaviour
     {
         if (amount <= 0) return;
         Money += amount;
-        UpgradeProgress.Instance?.AddMoney(amount); // carries the earning back into the Upgrade Tree's shared total
+        Wallet?.AddMoney(amount); // carries the earning back into the Upgrade Tree's shared total
         UpdateBalanceText();
         MoneyChanged?.Invoke(Money);
     }
@@ -711,7 +717,11 @@ public class GameEngine : MonoBehaviour
     void SpawnBalls()
     {
         cueBall = SpawnBall(0, HeadSpot());
+        SpawnRack();
+    }
 
+    void SpawnRack()
+    {
         // Every night starts with a single object ball. The only way to get more is the rack upgrades,
         // which raise Upgrades.RackSize (1 by default) and so how many balls are racked here
         int rackSize = Mathf.Clamp(Upgrades.Instance != null ? Upgrades.Instance.RackSize : fallbackRackSize, 1, MaxBalls);
@@ -869,7 +879,7 @@ public class GameEngine : MonoBehaviour
     IEnumerator ReturnToLobbyAfterDelay()
     {
         yield return new WaitForSeconds(2f);
-        SceneManager.LoadScene("Lobby");
+        SceneManager.LoadScene(TutorialSession.Route("Lobby")); // the Tutorial Lobby copy while in the tutorial
     }
 
     public Ball getBall(int id)
@@ -888,7 +898,7 @@ public class GameEngine : MonoBehaviour
     public bool TrySpend(int amount)
     {
         if (amount <= 0 || Money < amount) return false;
-        if (UpgradeProgress.Instance != null && !UpgradeProgress.Instance.TrySpend(amount)) return false;
+        if (Wallet != null && !Wallet.TrySpend(amount)) return false;
 
         Money -= amount;
         UpdateBalanceText();

@@ -7,6 +7,7 @@ public class StartMenu : MonoBehaviour
     [SerializeField] GameObject mainPanel, settingsPanel, tutorialPanel;
 
     public void StartGame() => SceneManager.LoadScene(gameScene);
+    public void OpenTutorial() => SceneManager.LoadScene(TutorialSession.SceneName);
     public void ShowMain() => Show(mainPanel);
     public void ShowSettings() => Show(settingsPanel);
     public void ShowTutorial() => Show(tutorialPanel);

@@ -20,6 +20,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Upgrade Tree.unity
     guid: 7107d545135ff8049b36de993ed1aa8e
+  - enabled: 1
+    path: Assets/Scenes/Tutorial.unity
+    guid: 06032a9b54190a946a80573afa4bc9bd
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
   m_UseUCBPForAssetBundles: 0

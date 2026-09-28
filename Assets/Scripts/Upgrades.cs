@@ -9,11 +9,44 @@ public class Upgrades : MonoBehaviour
     // values from here (Instance) when they wake up, instead of this script pushing into them.
     public static Upgrades Instance { get; private set; }
 
+    // Tutorial sandbox (see TutorialSession): the real Upgrades is set aside, switched off, and replaced
+    // by a fresh one with every level at its default, then brought back when the tutorial ends
+    static Upgrades stashed;
+
+    public static void EnterSandbox()
+    {
+        if (stashed != null) return;
+        stashed = Instance;
+        if (stashed != null) stashed.gameObject.SetActive(false);
+        Instance = null;
+        new GameObject("Upgrades (Tutorial)").AddComponent<Upgrades>();
+    }
+
+    public static void ExitSandbox()
+    {
+        if (Instance != null && Instance != stashed) Destroy(Instance.gameObject);
+        Instance = stashed;
+        if (Instance != null) Instance.gameObject.SetActive(true);
+        stashed = null;
+    }
+
+    // Evicted (see Rent.StartNewRun): throw away every level so the next run starts from scratch
+    public static void ResetForNewRun()
+    {
+        if (Instance != null) Destroy(Instance.gameObject);
+        Instance = null;
+        new GameObject("Upgrades").AddComponent<Upgrades>();
+    }
+
     // Runs once when the game starts, before the first scene loads, whichever scene you press Play in.
     // Guarantees an Upgrades object exists even if none was placed in a scene. A scene-placed one
     // loaded later sees this one already set as Instance and removes itself (see Awake).
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetInstance() => Instance = null;
+    static void ResetInstance()
+    {
+        Instance = null;
+        stashed = null;
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void CreateIfMissing()
@@ -56,6 +89,8 @@ public class Upgrades : MonoBehaviour
 
     void Update()
     {
+        if (TutorialSession.Active) return; // the tutorial's night timer is frozen so there's time to read
+
         if (nightInProgress && nightTimeLeft > 0f)
             nightTimeLeft = Mathf.Max(0f, nightTimeLeft - Time.deltaTime);
     }

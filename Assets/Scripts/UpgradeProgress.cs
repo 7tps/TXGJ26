@@ -15,13 +15,53 @@ public class UpgradeProgress : MonoBehaviour
     public static UpgradeProgress Instance { get; private set; }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetInstance() => Instance = null;
+    static void ResetInstance()
+    {
+        Instance = null;
+        stashed = null;
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void CreateIfMissing()
     {
         if (Instance != null) return;
         new GameObject("UpgradeProgress").AddComponent<UpgradeProgress>();
+    }
+
+    // Tutorial sandbox (see TutorialSession): the real wallet and tree progress are set aside and a
+    // fresh empty one is used instead, then the real one comes back when the tutorial ends
+    static UpgradeProgress stashed;
+
+    public static void EnterSandbox()
+    {
+        if (stashed != null) return;
+        stashed = Instance;
+        if (stashed != null) stashed.gameObject.SetActive(false);
+        Instance = null;
+        new GameObject("UpgradeProgress (Tutorial)").AddComponent<UpgradeProgress>();
+    }
+
+    public static void ExitSandbox()
+    {
+        UpgradeProgress sandbox = Instance;
+        Instance = stashed;
+        if (Instance != null) Instance.gameObject.SetActive(true);
+        stashed = null;
+        if (sandbox != null && sandbox != Instance) Destroy(sandbox.gameObject);
+    }
+
+    // Lets anything that swaps the wallet (the tutorial sandbox) refresh every money readout and tree node
+    public static void NotifyChanged() => Changed?.Invoke();
+
+    public int OwnedCount => ownedNodes.Count;
+
+    // Evicted (see Rent.StartNewRun): a fresh wallet and no owned nodes for the next run
+    public static void ResetForNewRun()
+    {
+        if (Instance != null) Destroy(Instance.gameObject);
+        Instance = null;
+        new GameObject("UpgradeProgress").AddComponent<UpgradeProgress>();
+        Changed?.Invoke();
     }
 
     // The shared currency spent in the Upgrade Tree, earned back in SampleScene. GameEngine seeds its

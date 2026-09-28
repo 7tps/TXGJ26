@@ -1011,6 +1011,9 @@ MonoBehaviour:
   minPull: 0.5
   maxShotSpeed: 50
   followThroughTime: 0.2
+  readoutFontSize: 3
+  readoutGap: 0.15
+  readoutBarSegments: 20
 --- !u!1 &262317292
 GameObject:
   m_ObjectHideFlags: 0
@@ -4324,14 +4327,14 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 159820643}
         m_TargetAssemblyTypeName: UIScript, Assembly-CSharp
-        m_MethodName: returnToMenu
-        m_Mode: 1
+        m_MethodName: swapScene
+        m_Mode: 5
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
           m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
           m_IntArgument: 0
           m_FloatArgument: 0
-          m_StringArgument: 
+          m_StringArgument: Lobby
           m_BoolArgument: 1
         m_CallState: 2
 --- !u!114 &1895906066
@@ -4592,6 +4595,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   balanceText: {fileID: 1851124479}
+  timerText: {fileID: 0}
   ballValues: 0a000000140000001e00000028000000320000003c00000046000000500000005a000000640000006e00000078000000820000008c00000096000000
   ballPrefab: {fileID: 155389897299582972, guid: 2de1c81cc62352f498aa5d8e803e79b2, type: 3}
   ballSprites:
@@ -4629,6 +4633,8 @@ MonoBehaviour:
   guideBounces: 2
   cushionBounciness: 0.9
   guideEndLength: 1
+  fallbackRackSize: 1
+  tutorialRackSize: 3
 --- !u!1 &2049008601
 GameObject:
   m_ObjectHideFlags: 0

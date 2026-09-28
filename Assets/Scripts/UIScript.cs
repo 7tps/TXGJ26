@@ -20,7 +20,7 @@ public class UIScript : MonoBehaviour
 
     public void swapScene(String sceneToSwap)
     {
-        SceneManager.LoadScene(sceneToSwap);
+        SceneManager.LoadScene(TutorialSession.Route(sceneToSwap)); // tutorial copies while in the tutorial
     }
     
     public void redrawCueStick()

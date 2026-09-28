@@ -8,5 +8,5 @@ public class SceneButton : MonoBehaviour
 {
     [SerializeField] string sceneName = "Lobby";
 
-    public void Load() => SceneManager.LoadScene(sceneName);
+    public void Load() => SceneManager.LoadScene(TutorialSession.Route(sceneName)); // tutorial copies while in the tutorial
 }

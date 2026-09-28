@@ -1,6 +1,7 @@
 using System;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 
 // Aim: the cue points at the mouse.
@@ -74,7 +75,13 @@ public class CueStick : MonoBehaviour
         halfLength = sr.sprite.bounds.extents.x * transform.lossyScale.x;
         cam = Camera.main;
         Hide();
+    }
 
+    // Upgrades are read in Start, not Awake: by then the tutorial sandbox (swapped in when a tutorial
+    // scene finishes loading, see TutorialSession) is already in place, so the tutorial's cue reads the
+    // tutorial's own upgrades
+    void Start()
+    {
         if (Upgrades.Instance != null)
         {
             maxPull = Upgrades.Instance.CurrentMaxPull;
@@ -173,7 +180,9 @@ public class CueStick : MonoBehaviour
             Vector2 toMouse = mouseWorld - cueBall.Rb.position;
             if (toMouse.sqrMagnitude > 0.01f) aimDir = toMouse.normalized;
 
-            if (mouse.leftButton.wasPressedThisFrame)
+            // A click on a UI button (pause, tutorial Next, ...) shouldn't also start pulling the cue back
+            bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+            if (mouse.leftButton.wasPressedThisFrame && !overUI)
             {
                 phase = Phase.Charging;
                 dragStart = mouseWorld;
