@@ -20,7 +20,7 @@ public class UIScript : MonoBehaviour
 
     public void swapScene(String sceneToSwap)
     {
-        SceneManager.LoadScene(sceneToSwap);
+        NightClock.TryLoadScene(sceneToSwap); // refuses Main / Upgrade Tree while the night's fees are due
     }
     
     public void redrawCueStick()

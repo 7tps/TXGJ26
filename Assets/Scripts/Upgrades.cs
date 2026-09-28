@@ -45,14 +45,24 @@ public class Upgrades : MonoBehaviour
     [SerializeField] float baseNightSeconds = 60f;
     [SerializeField] bool nightInProgress;
     [SerializeField] float nightTimeLeft;
+    [SerializeField] float nightDuration; // this night's total, so the clock can show elapsed / total
+    [SerializeField] bool feesDue; // the night ended and the table fees haven't been visited yet - locks Main and the Upgrade Tree (see NightClock)
     [SerializeField] int roundsClearedTonight;
     [SerializeField] int hotStreak;
 
     public float NightTimeLeft => nightTimeLeft;
     public bool NightTimeUp => nightInProgress && nightTimeLeft <= 0f;
+    public bool NightInProgress => nightInProgress;
+    public bool FeesDue => feesDue;
     public int RoundsClearedTonight => roundsClearedTonight;
     public int HotStreak => hotStreak;
     public float NightLength => baseNightSeconds + EnduranceSecondsByLevel[Mathf.Clamp(enduranceLevel, 0, 4)];
+
+    // 0 at the start of a night up to 1 when it runs out, which is what the clock sprites are drawn from.
+    // Stays at 1 while the fees are due, and at 0 between the fees and the next night.
+    public float NightProgress =>
+        feesDue ? 1f :
+        nightInProgress && nightDuration > 0f ? Mathf.Clamp01(1f - nightTimeLeft / nightDuration) : 0f;
 
     void Update()
     {
@@ -60,16 +70,31 @@ public class Upgrades : MonoBehaviour
             nightTimeLeft = Mathf.Max(0f, nightTimeLeft - Time.deltaTime);
     }
 
-    // Called every time the table scene loads: a fresh night with a full timer
+    // A fresh night with a full timer. The night spans the Lobby, Main and Upgrade Tree scenes, so
+    // this is not called on every scene load - see BeginNightIfNeeded
     public void StartNewNight()
     {
         nightInProgress = true;
-        nightTimeLeft = NightLength;
+        nightDuration = NightLength;
+        nightTimeLeft = nightDuration;
+        feesDue = false;
         roundsClearedTonight = 0;
         hotStreak = 0;
     }
 
-    public void AddTime(float seconds) { if (nightInProgress && seconds > 0f) nightTimeLeft += seconds; }
+    // Starts a night only if one isn't already running and the last one's fees aren't still owed
+    public void BeginNightIfNeeded()
+    {
+        if (!nightInProgress && !feesDue) StartNewNight();
+    }
+
+    public void AddTime(float seconds)
+    {
+        if (!nightInProgress || seconds <= 0f) return;
+        nightTimeLeft += seconds;
+        nightDuration += seconds;
+    }
+
     public void RecordRoundCleared() { roundsClearedTonight++; }
     public void RecordShotResult(bool pocketedSomething) { hotStreak = pocketedSomething ? hotStreak + 1 : 0; }
 
@@ -77,7 +102,12 @@ public class Upgrades : MonoBehaviour
     {
         nightInProgress = false;
         nightTimeLeft = 0f;
+        feesDue = true;
     }
+
+    // Lifts the Main / Upgrade Tree lock. NightClock calls this when the Table Fees scene loads; the
+    // fees system can also call it directly once the bill is paid
+    public void ClearFeesLock() { feesDue = false; }
 
     [Header("Cue Ball Upgrades")]
     [Space(15)]

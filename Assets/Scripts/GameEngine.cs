@@ -135,7 +135,7 @@ public class GameEngine : MonoBehaviour
         {
             if (Upgrades.Instance.HasAimGuide) guideBounces = Upgrades.Instance.CurrentGuideBounces;
             cushionBounciness = Upgrades.Instance.CurrentCushionBounciness;
-            Upgrades.Instance.StartNewNight();
+            Upgrades.Instance.BeginNightIfNeeded(); // the night is already running if we came from the Lobby
         }
 
         // The shared wallet lives on UpgradeProgress; Money here is just this scene's mirror of it

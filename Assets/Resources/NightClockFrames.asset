@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 37c1d3974f2c27949994ac1a84656035, type: 3}
+  m_Name: NightClockFrames
+  m_EditorClassIdentifier: 
+  frames:
+  - {fileID: 5088316998373936774, guid: 20bb85c6f0fa71c48803dd32754f9786, type: 3}
+  - {fileID: -855298285791758126, guid: b8e7abee231751a4aa30272262eb1108, type: 3}
+  - {fileID: 6937817954938267909, guid: 13458d34e7db78642ba819b103c095b1, type: 3}
+  - {fileID: -6470460504253458178, guid: 48f38979a7555e040924dbca5be87998, type: 3}
+  - {fileID: -4178046375966092550, guid: 8675fcb5539fa154cafdb042626008f7, type: 3}
+  - {fileID: 4130640169021434097, guid: 4299ab913a26f77419c77f5bed632bce, type: 3}
+  - {fileID: 3465286685962602723, guid: 6b234a16d9cb4ab47894e387cbf98829, type: 3}
+  - {fileID: 7028616704906629411, guid: ad46b454221707e4cb81776805d59574, type: 3}
+  - {fileID: 8288426215254106694, guid: 3bc03252e9a91eb4c9e6627b716de155, type: 3}
+  - {fileID: 4113829005332862926, guid: ec512a11151db03439d502bf5c4c248c, type: 3}
+  - {fileID: -5099292496197868168, guid: 6e1d5a05e3367404396f4849e93b4687, type: 3}
+  - {fileID: -2966200626249415253, guid: 5c8f1a07b963ec04e9f76193422e098a, type: 3}
+  - {fileID: -1540426309290004842, guid: 4b46dd08a879fa24ea0fc8bee41bd0e2, type: 3}
